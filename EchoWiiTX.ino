@@ -58,7 +58,7 @@
  
  
  */ 
-
+// Display Headers
 #include <avdweb_AnalogReadFast.h>
 #include "ssd1306.h"
 // #include "nano_gfx.h"
@@ -133,17 +133,26 @@ float battery_voltage;
 // #define DEBUG 1
 
 // Temporary
-uint16_t sensorValue0, sensorValue1;
+uint16_t sensorValue0;
 uint16_t throttleValue, rudderValue, elevatorValue, aileronValue;
-
 char buf[32];
 char line_buffer[32];
+
+uint8_t val1, val2, val3, val4, val5, val6, val7, val8, val9, val10, val11, val12, val13, val14, val15, val16;
 
 // Default mode = 0
 // MODE:
 // 0: Normal TX Mode
 // 1: RF Scanning Mode
 uint8_t txmode = 0;
+
+// Define menu items
+const char *menuItems[] = {
+    " RF Scanner",
+    " Exit"
+};
+
+SAppMenu menu;
 
 /*
  * 2.4G Scanning Program [START]
@@ -283,19 +292,11 @@ void scanChannels() {
             ssd1306_drawLine(i, 54, i, y);    
         }
 
-        // TODO: Temporary here and will be remove in future by using functions
-        // Checking Inputs
-        PORTD = B10000000;
-        NOP;
-        uint8_t val14 = (PIND & (1<<PD1))>>PD1;
-        PORTD = B00000000;
-        if(val14 == 0) {
-            txmode = 0;
-            ssd1306_fillScreen(0x00);
-            ssd1306_setFixedFont(ssd1306xled_font6x8);
-            ssd1306_printFixed(0,  0, "[ ECHOWII TX ]", STYLE_NORMAL);
+        readSwitches();
+
+        if(val3 == 1 && val8 == 1) {
+            // It needs to reset so to have clean RF transmission configurations
             resetFunc();
-            // i = MAX_CHANNELS + 1;
         }
     }
 }
@@ -354,6 +355,10 @@ void setup() {
     show_logo();
     delay(2000);
 
+    showHeader();
+}
+
+void showHeader() {
     ssd1306_fillScreen(0x00);
     ssd1306_setFixedFont(ssd1306xled_font6x8);
     ssd1306_printFixed(0,  0, "[ ECHOWII TX ]", STYLE_NORMAL);
@@ -390,9 +395,11 @@ void setup_radio() {
  * 0 = INPUT, 1 = OUTPUT
  * OUTPUT: Pin 7, 6, 5, 4
  * INPUT:  Pin 3, 2, 1, 0
+ * Initial stage all input to prevent interrupts
  */
 void setup_inputs() {
     DDRD = B11110000;
+    // DDRD = B00000000;
 }
 
 /*
@@ -413,6 +420,42 @@ void loop() {
     }
 }
 
+/*
+ * Reading key values
+ */
+void readSwitches() {
+    // Start from 1st Row
+    PORTD = B00010000;
+    NOP;
+    NOP;
+    val1 = (PIND & (1<<PD0))>>PD0;
+    val2 = (PIND & (1<<PD1))>>PD1;
+    val3 = (PIND & (1<<PD2))>>PD2;
+    val4 = (PIND & (1<<PD3))>>PD3;
+    PORTD = B00100000;
+    NOP;
+    NOP;
+    val5 = (PIND & (1<<PD0))>>PD0;
+    val6 = (PIND & (1<<PD1))>>PD1;
+    val7 = (PIND & (1<<PD2))>>PD2;
+    val8 = (PIND & (1<<PD3))>>PD3;
+    PORTD = B01000000;
+    NOP;
+    NOP;
+    val9 =  (PIND & (1<<PD0))>>PD0;
+    val10 = (PIND & (1<<PD1))>>PD1;
+    val11 = (PIND & (1<<PD2))>>PD2;
+    val12 = (PIND & (1<<PD3))>>PD3;
+    PORTD = B10000000;
+    NOP;
+    NOP;
+    val13 = (PIND & (1<<PD0))>>PD0;
+    val14 = (PIND & (1<<PD1))>>PD1;
+    val15 = (PIND & (1<<PD2))>>PD2;
+    val16 = (PIND & (1<<PD3))>>PD3;
+    PORTD = B00000000;
+}
+
 void txMode() {
     throttleValue = analogReadFast(THROTTLE_PORT);
     rudderValue = analogReadFast(RUDDER_PORT);
@@ -425,62 +468,95 @@ void txMode() {
     ssd1306_printFixed(0, 24, buf, STYLE_NORMAL);
     
     // Scannning with multiplexing
-    // Start from 1st Row
-    PORTD = B00010000;
-    NOP;
-    uint8_t val1 = (PIND & (1<<PD0))>>PD0;
-    uint8_t val2 = (PIND & (1<<PD1))>>PD1;
-    uint8_t val3 = (PIND & (1<<PD2))>>PD2;
-    uint8_t val4 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B00100000;
-    NOP;
-    uint8_t val5 = (PIND & (1<<PD0))>>PD0;
-    uint8_t val6 = (PIND & (1<<PD1))>>PD1;
-    uint8_t val7 = (PIND & (1<<PD2))>>PD2;
-    uint8_t val8 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B01000000;
-    NOP;
-    uint8_t val9 =  (PIND & (1<<PD0))>>PD0;
-    uint8_t val10 = (PIND & (1<<PD1))>>PD1;
-    uint8_t val11 = (PIND & (1<<PD2))>>PD2;
-    uint8_t val12 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B10000000;
-    NOP;
-    uint8_t val13 = (PIND & (1<<PD0))>>PD0;
-    uint8_t val14 = (PIND & (1<<PD1))>>PD1;
-    uint8_t val15 = (PIND & (1<<PD2))>>PD2;
-    uint8_t val16 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B00000000;
-  
-    sprintf(buf, "%i %i %i %i", val5, val2, val3, val4);
+    
+    /*
+    PORTD = B00001000;
+    uint8_t y = 0;
+    for(int r = 0; r < 4; r++) {
+        for(int c = 0; c < 4; c++) {
+            PORTD = PORTD << 1;
+            NOP;
+            switches[c][r] = (PIND & (1<<c))>>c;
+        }
+        sprintf(buf, "%i %i %i %i", switches[0][r], switches[1][r], switches[2][r], switches[3][r]);
+        y = 32 + (r * 8);
+        ssd1306_printFixed(0, y, buf, STYLE_NORMAL);
+    }
+    */
+    readSwitches();
+
+    sprintf(buf, "%i %i %i %i", val1, val2, val3, val4);
     ssd1306_printFixed(0, 32, buf, STYLE_NORMAL);
-    sprintf(buf, "%i %i %i %i", val1, val6, val7, val8);
+    sprintf(buf, "%i %i %i %i", val5, val6, val7, val8);
     ssd1306_printFixed(0, 40, buf, STYLE_NORMAL);
+    sprintf(buf, "%i %i %i %i", val9, val10, val11, val12);
+    ssd1306_printFixed(0, 48, buf, STYLE_NORMAL);
+    sprintf(buf, "%i %i %i %i", val13, val14, val15, val16);
+    ssd1306_printFixed(0, 56, buf, STYLE_NORMAL);
 
     // BAT_IN
     sensorValue0 = analogReadFast(BAT_IN);
     battery_voltage = sensorValue0 * VOLTAGE_SCALE;
     dtostrf(battery_voltage, 3, 1, line_buffer);
-    
-    sprintf(buf, "%i %i %i %i BAT:%sV ", val13, val10, val11, val12, line_buffer);
-    ssd1306_printFixed(0, 48, buf, STYLE_NORMAL);
+    sprintf(buf, "BAT:%sV ", line_buffer);
+    ssd1306_printFixed(0, 8, buf, STYLE_NORMAL);
     
     // AUX1_PORT
     sensorValue0 = analogReadFast(AUX1_PORT);
-    sprintf(buf, "%i %i %i %i AUX:%04i", val9, val14, val15, val16, sensorValue0);
-    ssd1306_printFixed(0, 56, buf, STYLE_NORMAL);
+    sprintf(buf, "AUX:%04i", sensorValue0);
+    ssd1306_printFixed(64, 56, buf, STYLE_NORMAL);
 
+    // Trigger menu if val3 and val8 is true
+    if(val4 == 1 && val7 == 1) {
+        showMenu();
+    }
+    /*
     // TODO: Testing changing mode from here
     if(val14 == 0) {
         txmode = 0;
     } else {
         txmode = 1;
     }
+    */
 
     // Processing data and sending
     txData();
     
     delay(1);
+}
+
+void showMenu() {
+    ssd1306_fillScreen(0x00);
+    ssd1306_createMenu(&menu, menuItems, sizeof(menuItems) / sizeof(char *));
+    ssd1306_showMenu(&menu);
+
+    while(txmode == 0) {
+        readSwitches();
+
+        if(val6 == 1) {
+            ssd1306_menuDown(&menu);
+            ssd1306_updateMenu(&menu);
+        }
+
+        if(val5 == 1) {
+            ssd1306_menuUp(&menu);
+            ssd1306_updateMenu(&menu);
+        }
+
+        if(val8 == 1) {
+            uint8_t selectedItem = ssd1306_menuSelection(&menu);
+            // Only two items. So is 0 and 1....
+            if(selectedItem == 0) {
+                txmode = 1;
+                break;
+            }
+            if(selectedItem == 1) {
+                showHeader();
+                break;
+            }
+        }
+        delay(100);
+    }
 }
 
 /*
@@ -499,4 +575,3 @@ void txData() {
     // Sending Data
     radio.write(&data, sizeof(MyData));
 }
-
