@@ -107,6 +107,9 @@ MyData data;
 
 #define NOP __asm__ __volatile__ ("nop\n\t")
 
+//declare reset function at address 0
+void(* resetFunc) (void) = 0;
+
 /**
  * Configurations and Values
  */
@@ -228,7 +231,7 @@ void rfscanMode() {
     ssd1306_printFixed(0,  60, "0        64       128", STYLE_NORMAL);
 
     // Forever here... till the switch position changed.
-    while(1) {
+    while(txmode == 1) {
         scanChannels();
     }
 }
@@ -278,6 +281,21 @@ void scanChannels() {
             // Draw current line
             ssd1306_positiveMode();
             ssd1306_drawLine(i, 54, i, y);    
+        }
+
+        // TODO: Temporary here and will be remove in future by using functions
+        // Checking Inputs
+        PORTD = B10000000;
+        NOP;
+        uint8_t val14 = (PIND & (1<<PD1))>>PD1;
+        PORTD = B00000000;
+        if(val14 == 0) {
+            txmode = 0;
+            ssd1306_fillScreen(0x00);
+            ssd1306_setFixedFont(ssd1306xled_font6x8);
+            ssd1306_printFixed(0,  0, "[ ECHOWII TX ]", STYLE_NORMAL);
+            resetFunc();
+            // i = MAX_CHANNELS + 1;
         }
     }
 }
