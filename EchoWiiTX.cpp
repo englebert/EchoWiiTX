@@ -178,10 +178,17 @@ void rfscanMode() {
 void showRFScanMode() {
     ssd1306_fillScreen(0x00);
     ssd1306_setFixedFont(ssd1306xled_font6x8);
-    ssd1306_printFixed(0,  0, "[ 2.4G Scanner ]", STYLE_NORMAL);
+    ssd1306_printFixed(16,  0, "[ 2.4G Scanner ]", STYLE_NORMAL);
 
     // Preparing outlines...
-    // ssd1306_drawLine(0, 55, 128, 55);
+    ssd1306_drawLine(0, 13, 128, 13);
+
+    ssd1306_drawLine(0, 8, 0, 15);
+    ssd1306_drawLine(63, 8, 63, 15);
+    ssd1306_drawLine(127, 8, 127, 15);
+
+    ssd1306_drawLine(95, 10, 95, 15);
+    ssd1306_drawLine(32, 10, 32, 15);
     ssd1306_printFixed(0,  60, "0        64       128", STYLE_NORMAL);
 }
 
