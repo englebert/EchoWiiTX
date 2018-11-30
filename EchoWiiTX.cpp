@@ -15,6 +15,27 @@
 #include <RF24.h>
 
 /*
+ * Keypad configuration
+ */
+#include <Keypad.h>
+const byte ROWS = 4; //four rows
+const byte COLS = 4; //three columns
+char keys[ROWS][COLS] = {
+    {'1','2','3','4'},
+    {'5','6','7','8'},
+    {'9','A','B','C'},
+    {'D','E','F','#'}
+};
+
+byte rowPins[ROWS] = {3, 2, 1, 0}; //connect to the row pinouts of the kpd
+byte colPins[COLS] = {7, 6, 5, 4}; //connect to the column pinouts of the kpd
+Keypad kpd = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
+unsigned long loopCount;
+unsigned long startTime;
+String msg;
+
+
+/*
  * NRF24L01 Configurations
  */
 /* Create a unique pipe out. The receiver has to wear the same unique code*/
@@ -221,6 +242,7 @@ void scanChannels() {
         // Displaying Results
         negativeMode();
         drawLine(i, 55, i, 16);
+        // ssd1306_clearBlock(i, 24, 1, 16);
         if(channel_loads > 0) {
             // Using only 38 pixels of y
             // Starting from row 17, ends at row 54
@@ -282,6 +304,8 @@ void setup() {
         Serial.begin(57600);
     #endif
     // Debugging End
+
+    msg = "";
 
     // Initializing Multiplexing Input Pads
     setup_inputs();
@@ -355,6 +379,7 @@ void loop() {
  */
 void readSwitches() {
     // Start from 1st Row
+    /*
     PORTD = B00010000;
     NOP;
     NOP;
@@ -384,6 +409,53 @@ void readSwitches() {
     val15 = (PIND & (1<<PD2))>>PD2;
     val16 = (PIND & (1<<PD3))>>PD3;
     PORTD = B00000000;
+    */
+    int x = 0;
+    val1 = 0;
+    val2 = 0;
+    val3 = 0;
+    val4 = 0;
+    val5 = 0;
+    val6 = 0;
+    val7 = 0;
+    val8 = 0;
+    val9 = 0;
+    val10 = 0;
+    val11 = 0;
+    val12 = 0;
+    val13 = 0;
+    val14 = 0;
+    val15 = 0;
+    val16 = 0;
+
+    if(kpd.getKeys()) {
+        for(int i = 0; i < LIST_MAX; i++) {
+            if(kpd.key[i].kstate == PRESSED) {
+                // msg = msg + kpd.key[i].kchar + "P ";
+                sprintf(buf, "%cP", kpd.key[i].kchar);
+                if(kpd.key[i].kchar == '4') val4 = 1;
+                if(kpd.key[i].kchar == '7') val7 = 1;
+                if(kpd.key[i].kchar == 'F') val5 = 1;
+                if(kpd.key[i].kchar == 'B') val6 = 1;
+                if(kpd.key[i].kchar == '3') val8 = 1;
+            } else if(kpd.key[i].kstate == HOLD) {
+                // msg = msg + kpd.key[i].kchar + "H ";
+                sprintf(buf, "%cH", kpd.key[i].kchar);
+            } else if(kpd.key[i].kstate == RELEASED) {
+                // msg = msg + kpd.key[i].kchar + "R ";
+                sprintf(buf, "%cR", kpd.key[i].kchar);
+            } else if(kpd.key[i].kstate == IDLE) {
+                // msg = msg + kpd.key[i].kchar + "I ";
+                sprintf(buf, "%cI", kpd.key[i].kchar);
+            }
+            ssd1306_printFixed(x + (i*12), 32, buf, STYLE_NORMAL);
+        }
+        /*
+        if(LIST_MAX == 0) {
+            ssd1306_clearBlock(x, 32, 128, 8);
+        }
+        */
+    }
 }
 
 void txMode() {
@@ -414,7 +486,7 @@ void txMode() {
     }
     */
     readSwitches();
-
+    /*
     sprintf(buf, "%i %i %i %i", val1, val2, val3, val4);
     ssd1306_printFixed(0, 32, buf, STYLE_NORMAL);
     sprintf(buf, "%i %i %i %i", val5, val6, val7, val8);
@@ -423,6 +495,7 @@ void txMode() {
     ssd1306_printFixed(0, 48, buf, STYLE_NORMAL);
     sprintf(buf, "%i %i %i %i", val13, val14, val15, val16);
     ssd1306_printFixed(0, 56, buf, STYLE_NORMAL);
+    */
 
     // BAT_IN
     sensorValue0 = analogReadFast(BAT_IN);
