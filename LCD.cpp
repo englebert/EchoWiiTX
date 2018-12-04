@@ -11,12 +11,7 @@
  */
 void show_logo() {
     ssd1306_drawBitmap(0, 0, 128, 64, echowiitx_logo);
-}
-
-void showHeader() {
-    ssd1306_fillScreen(0x00);
-    ssd1306_setFixedFont(ssd1306xled_font6x8);
-    ssd1306_printFixed(0,  0, "[ ECHOWII TX ]", STYLE_NORMAL);
+    // ssd1306_printFixed(0, 32, "EchoWiiTX", STYLE_NORMAL);
 }
 
 void negativeMode() {

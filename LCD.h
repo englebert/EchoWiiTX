@@ -12,6 +12,5 @@ void positiveMode();
 void run_createMenu(SAppMenu, const char **, uint8_t);
 void run_showMenu(SAppMenu);
 void show_logo();
-void showHeader();
 void showMenu();
 #endif

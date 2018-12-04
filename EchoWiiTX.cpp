@@ -14,17 +14,21 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
+// For Saving configurations
+#include <EEPROM.h>
+
 /*
  * Keypad configuration
  */
 #include <Keypad.h>
 const byte ROWS = 4; //four rows
 const byte COLS = 4; //three columns
+
 char keys[ROWS][COLS] = {
-    {'1','2','3','4'},
-    {'5','6','7','8'},
-    {'9','A','B','C'},
-    {'D','E','F','#'}
+    {'Z','F','L','3'},
+    {'D','A','J','1'},
+    {'G','B','K','2'},
+    {'H','E','I','5'}
 };
 
 byte rowPins[ROWS] = {3, 2, 1, 0}; //connect to the row pinouts of the kpd
@@ -32,8 +36,6 @@ byte colPins[COLS] = {7, 6, 5, 4}; //connect to the column pinouts of the kpd
 Keypad kpd = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 unsigned long loopCount;
 unsigned long startTime;
-String msg;
-
 
 /*
  * NRF24L01 Configurations
@@ -51,7 +53,7 @@ RF24 radio(9, 10);                        // D9 -> Enable, D10 -> CSN pin
 #define _NRF24_RF_SETUP    0x06
 #define _NRF24_RPD         0x09
 
-#define CE  9
+#define CE           9
 #define MAX_CHANNELS 125
 
 // Use for storing the data of the channel load
@@ -72,6 +74,7 @@ MyData data;
 // Define menu items
 const char *menuItems[] = {
     " RF Scanner",
+    " Debug Keys",
     " Exit"
 };
 
@@ -80,6 +83,8 @@ const char *menuItems[] = {
 // 0: Normal TX Mode
 // 1: RF Scanning Mode
 uint8_t txmode = 0;
+
+uint8_t trimUpdates = 1;
 
 SAppMenu menu;
 
@@ -100,14 +105,10 @@ SAppMenu menu;
 // Voltage Scaling Value
 #define VOLTAGE_SCALE 0.04878
 
-float battery_voltage;
 
 // For Debugging Purposes
 // #define DEBUG 1
 
-// Temporary
-uint16_t sensorValue0;
-uint16_t throttleValue, rudderValue, elevatorValue, aileronValue;
 char buf[32];
 char line_buffer[32];
 
@@ -197,9 +198,7 @@ void rfscanMode() {
 }
 
 void showRFScanMode() {
-    ssd1306_fillScreen(0x00);
-    ssd1306_setFixedFont(ssd1306xled_font6x8);
-    ssd1306_printFixed(16,  0, "[ 2.4G Scanner ]", STYLE_NORMAL);
+    showHeader(16, 0, "[ 2.4G Scanner ]", 0);
 
     // Preparing outlines...
     ssd1306_drawLine(0, 13, 128, 13);
@@ -258,9 +257,11 @@ void scanChannels() {
 
         readSwitches();
 
-        if(val3 == 1 && val8 == 1) {
+        if(lgimbal_left == 1 && rgimbal_right == 1) {
             // It needs to reset so to have clean RF transmission configurations
             resetFunc();
+            // showHeaderMain();
+            // txmode = 0;
         }
     }
 }
@@ -282,17 +283,58 @@ void resetData() {
 }
 
 /*
- * Returns a corrected value for a joystick position that takes into account
- * the values of the outer extents and the middle of the joystick range.
+ * Writting EEPROM in 2 Bytes mode (integer - 16 bits)
  */
-int mapJoystickValues(int val, int lower, int middle, int upper, bool reverse) {
-    val = constrain(val, lower, upper);
-    if ( val < middle ) {
-      val = map(val, lower, middle, 0, 128);
-    } else {
-      val = map(val, middle, upper, 128, 255);
+void EEPROMWrite16Bits(uint16_t addr, uint16_t value) {
+    uint8_t lower_bits = (value & 0xFF);
+    uint8_t higher_bits = ((value >> 8) & 0xFF);
+
+    // Writing the 2 bytes into the eeprom memory
+    EEPROM.write(addr, lower_bits);
+    EEPROM.write(addr + 1, higher_bits);
+}
+
+/*
+ * Reading EEPROM in 2 Bytes mode (integer - 16 bits)
+ */
+uint16_t EEPROMRead16Bits(uint16_t addr) {
+    uint16_t lower_bits = EEPROM.read(addr);
+    uint16_t higher_bits = EEPROM.read(addr + 1);
+
+    // Returning the composed output by using bitshift
+    return ((lower_bits << 0) & 0xFF) + ((higher_bits << 8) & 0xFFFF);
+}
+
+/*
+ * EEPROM checksum functions
+ */
+uint8_t checksum() {
+    uint8_t sum=0x68;                 // checksum init
+    for(uint16_t i = 0; i < 16; i++) {
+        sum += EEPROM.read(i);
     }
-    return ( reverse ? 255 - val : val );
+    return sum;
+}
+
+// Reading configurations from EEPROM to variables.
+void readEEPROM() {
+    uint16_t addr = 0;
+
+    // Reading checksum from EEPROM
+    eeprom_checksum = EEPROM.read(0x03FF);
+
+    // If checksum wrong then load default else load from it.
+    if(eeprom_checksum == checksum()) {
+        // Reading the data
+        throttle_lower_limit = EEPROMRead16Bits(0x0000);
+        throttle_upper_limit = EEPROMRead16Bits(0x0002);
+        rudder_lower_limit = EEPROMRead16Bits(0x0004);
+        rudder_upper_limit = EEPROMRead16Bits(0x0006);
+        elevator_lower_limit = EEPROMRead16Bits(0x0008);
+        elevator_upper_limit = EEPROMRead16Bits(0x000A);
+        aileron_lower_limit = EEPROMRead16Bits(0x000C);
+        aileron_upper_limit = EEPROMRead16Bits(0x000F);
+    }
 }
 
 /*
@@ -305,10 +347,8 @@ void setup() {
     #endif
     // Debugging End
 
-    msg = "";
-
-    // Initializing Multiplexing Input Pads
-    setup_inputs();
+    // Reading from EEPROM
+    readEEPROM();
 
     // Reset
     resetData();
@@ -318,10 +358,10 @@ void setup() {
     
     // Initializing OLED and display logo
     LCDInit();
-    show_logo();
-    delay(2000);
+    // show_logo();
+    // delay(2000);
 
-    showHeader();
+    showHeaderMain();
 }
 
 void setup_radio() {
@@ -351,19 +391,6 @@ void setup_radio() {
 }
 
 /*
- * Setup Input Pads
- * 0 = INPUT, 1 = OUTPUT
- * OUTPUT: Pin 7, 6, 5, 4
- * INPUT:  Pin 3, 2, 1, 0
- * Initial stage all input to prevent interrupts
- */
-void setup_inputs() {
-    DDRD = B11110000;
-    // DDRD = B00000000;
-}
-
-
-/*
  * Arduino Main Loop
  */
 void loop() {
@@ -371,6 +398,8 @@ void loop() {
         txMode();
     } else if(txmode == 1) {
         rfscanMode();
+    } else if(txmode == 2) {
+        debugKeys();
     }
 }
 
@@ -378,154 +407,149 @@ void loop() {
  * Reading key values
  */
 void readSwitches() {
-    // Start from 1st Row
-    /*
-    PORTD = B00010000;
-    NOP;
-    NOP;
-    val1 = (PIND & (1<<PD0))>>PD0;
-    val2 = (PIND & (1<<PD1))>>PD1;
-    val3 = (PIND & (1<<PD2))>>PD2;
-    val4 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B00100000;
-    NOP;
-    NOP;
-    val5 = (PIND & (1<<PD0))>>PD0;
-    val6 = (PIND & (1<<PD1))>>PD1;
-    val7 = (PIND & (1<<PD2))>>PD2;
-    val8 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B01000000;
-    NOP;
-    NOP;
-    val9 =  (PIND & (1<<PD0))>>PD0;
-    val10 = (PIND & (1<<PD1))>>PD1;
-    val11 = (PIND & (1<<PD2))>>PD2;
-    val12 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B10000000;
-    NOP;
-    NOP;
-    val13 = (PIND & (1<<PD0))>>PD0;
-    val14 = (PIND & (1<<PD1))>>PD1;
-    val15 = (PIND & (1<<PD2))>>PD2;
-    val16 = (PIND & (1<<PD3))>>PD3;
-    PORTD = B00000000;
-    */
-    int x = 0;
-    val1 = 0;
-    val2 = 0;
-    val3 = 0;
-    val4 = 0;
-    val5 = 0;
-    val6 = 0;
-    val7 = 0;
-    val8 = 0;
-    val9 = 0;
-    val10 = 0;
-    val11 = 0;
-    val12 = 0;
-    val13 = 0;
-    val14 = 0;
-    val15 = 0;
-    val16 = 0;
-
     if(kpd.getKeys()) {
         for(int i = 0; i < LIST_MAX; i++) {
             if(kpd.key[i].kstate == PRESSED) {
                 // msg = msg + kpd.key[i].kchar + "P ";
-                sprintf(buf, "%cP", kpd.key[i].kchar);
-                if(kpd.key[i].kchar == '4') val4 = 1;
-                if(kpd.key[i].kchar == '7') val7 = 1;
-                if(kpd.key[i].kchar == 'F') val5 = 1;
-                if(kpd.key[i].kchar == 'B') val6 = 1;
-                if(kpd.key[i].kchar == '3') val8 = 1;
+                if(kpd.key[i].kchar == 'A') sw_a = 1;
+                else if(kpd.key[i].kchar == 'B') sw_b = 1;
+                else if(kpd.key[i].kchar == 'D') sw_d = 1;
+                else if(kpd.key[i].kchar == 'E') sw_e = 1;
+                else if(kpd.key[i].kchar == 'F') sw_f = 1;
+                else if(kpd.key[i].kchar == 'G') sw_g = 1;
+                else if(kpd.key[i].kchar == 'H') sw_h = 1;
+                else if(kpd.key[i].kchar == 'I') rgimbal_up = 1;
+                else if(kpd.key[i].kchar == 'J') rgimbal_left = 1;
+                else if(kpd.key[i].kchar == 'K') rgimbal_down = 1;
+                else if(kpd.key[i].kchar == 'L') rgimbal_right = 1;
+                else if(kpd.key[i].kchar == '1') lgimbal_left = 1;
+                else if(kpd.key[i].kchar == '2') lgimbal_down = 1;
+                else if(kpd.key[i].kchar == '3') lgimbal_right = 1;
+                else if(kpd.key[i].kchar == '5') lgimbal_up = 1;
             } else if(kpd.key[i].kstate == HOLD) {
                 // msg = msg + kpd.key[i].kchar + "H ";
-                sprintf(buf, "%cH", kpd.key[i].kchar);
-            } else if(kpd.key[i].kstate == RELEASED) {
+                if(kpd.key[i].kchar == 'A') sw_a = 9;
+                else if(kpd.key[i].kchar == 'B') sw_b = 9;
+                else if(kpd.key[i].kchar == 'D') sw_d = 9;
+                else if(kpd.key[i].kchar == 'E') sw_e = 9;
+                else if(kpd.key[i].kchar == 'F') sw_f = 9;
+                else if(kpd.key[i].kchar == 'G') sw_g = 9;
+                else if(kpd.key[i].kchar == 'H') sw_h = 9;
+                else if(kpd.key[i].kchar == 'I') rgimbal_up = 9;
+                else if(kpd.key[i].kchar == 'J') rgimbal_left = 9;
+                else if(kpd.key[i].kchar == 'K') rgimbal_down = 9;
+                else if(kpd.key[i].kchar == 'L') rgimbal_right = 9;
+                else if(kpd.key[i].kchar == '1') lgimbal_left = 9;
+                else if(kpd.key[i].kchar == '2') lgimbal_down = 9;
+                else if(kpd.key[i].kchar == '3') lgimbal_right = 9;
+                else if(kpd.key[i].kchar == '5') lgimbal_up = 9;
+            // } else if(kpd.key[i].kstate == RELEASED) {
                 // msg = msg + kpd.key[i].kchar + "R ";
-                sprintf(buf, "%cR", kpd.key[i].kchar);
+                // if(kpd.key[i].kchar == 'A') sw_a = 0;
+                // else if(kpd.key[i].kchar == 'B') sw_b = 0;
+                // else if(kpd.key[i].kchar == 'D') sw_d = 0;
+                // else if(kpd.key[i].kchar == 'E') sw_e = 0;
+                // else if(kpd.key[i].kchar == 'F') sw_f = 0;
+                // else if(kpd.key[i].kchar == 'G') sw_g = 0;
+                // else if(kpd.key[i].kchar == 'H') sw_h = 0;
+                // else if(kpd.key[i].kchar == 'I') rgimbal_up = 0;
+                // else if(kpd.key[i].kchar == 'J') rgimbal_left = 0;
+                // else if(kpd.key[i].kchar == 'K') rgimbal_down = 0;
+                // else if(kpd.key[i].kchar == 'L') rgimbal_right = 0;
+                // else if(kpd.key[i].kchar == '1') lgimbal_left = 0;
+                // else if(kpd.key[i].kchar == '2') lgimbal_down = 0;
+                // else if(kpd.key[i].kchar == '3') lgimbal_right = 0;
+                // else if(kpd.key[i].kchar == '5') lgimbal_up = 0;
             } else if(kpd.key[i].kstate == IDLE) {
                 // msg = msg + kpd.key[i].kchar + "I ";
-                sprintf(buf, "%cI", kpd.key[i].kchar);
+                if(kpd.key[i].kchar == 'A') sw_a = 5;
+                else if(kpd.key[i].kchar == 'B') sw_b = 5;
+                else if(kpd.key[i].kchar == 'D') sw_d = 5;
+                else if(kpd.key[i].kchar == 'E') sw_e = 5;
+                else if(kpd.key[i].kchar == 'F') sw_f = 5;
+                else if(kpd.key[i].kchar == 'G') sw_g = 5;
+                else if(kpd.key[i].kchar == 'H') sw_h = 5;
+                else if(kpd.key[i].kchar == 'I') rgimbal_up = 5;
+                else if(kpd.key[i].kchar == 'J') rgimbal_left = 5;
+                else if(kpd.key[i].kchar == 'K') rgimbal_down = 5;
+                else if(kpd.key[i].kchar == 'L') rgimbal_right = 5;
+                else if(kpd.key[i].kchar == '1') lgimbal_left = 5;
+                else if(kpd.key[i].kchar == '2') lgimbal_down = 5;
+                else if(kpd.key[i].kchar == '3') lgimbal_right = 5;
+                else if(kpd.key[i].kchar == '5') lgimbal_up = 5;
             }
-            ssd1306_printFixed(x + (i*12), 32, buf, STYLE_NORMAL);
         }
-        /*
-        if(LIST_MAX == 0) {
-            ssd1306_clearBlock(x, 32, 128, 8);
-        }
-        */
     }
 }
 
-void txMode() {
+/*
+ * Reading all the analog input data
+ */
+void readAnalogs() {
+    // Gimbal readings
     throttleValue = analogReadFast(THROTTLE_PORT);
     rudderValue = analogReadFast(RUDDER_PORT);
-    sprintf(buf, "T:%04i R:%04i", throttleValue, rudderValue);
-    ssd1306_printFixed(0, 16, buf, STYLE_NORMAL);
-  
     aileronValue = analogReadFast(AILERON_PORT);
     elevatorValue = analogReadFast(ELEVATOR_PORT);
-    sprintf(buf, "A:%04i E:%04i", aileronValue, elevatorValue);
-    ssd1306_printFixed(0, 24, buf, STYLE_NORMAL);
-    
-    // Scannning with multiplexing
-    
-    /*
-    PORTD = B00001000;
-    uint8_t y = 0;
-    for(int r = 0; r < 4; r++) {
-        for(int c = 0; c < 4; c++) {
-            PORTD = PORTD << 1;
-            NOP;
-            switches[c][r] = (PIND & (1<<c))>>c;
-        }
-        sprintf(buf, "%i %i %i %i", switches[0][r], switches[1][r], switches[2][r], switches[3][r]);
-        y = 32 + (r * 8);
-        ssd1306_printFixed(0, y, buf, STYLE_NORMAL);
-    }
-    */
+
+    // Mapping the values to 1000 - 2000 as standard of the RC values
+    throttleValue = map(throttleValue, throttle_lower_limit, throttle_upper_limit, 1000, 2000);
+    rudderValue = map(rudderValue, rudder_lower_limit, rudder_upper_limit, 1000, 2000);
+    aileronValue = map(aileronValue, aileron_lower_limit, aileron_upper_limit, 1000, 2000);
+    elevatorValue = map(elevatorValue, elevator_lower_limit, elevator_upper_limit, 1000, 2000);
+
+    // Battery Input
+    batteryVoltageValue = analogReadFast(BAT_IN);
+
+    // Variable Resistor
+    channelCValue = analogReadFast(AUX1_PORT);
+}
+
+void txMode() {
     readSwitches();
-    /*
-    sprintf(buf, "%i %i %i %i", val1, val2, val3, val4);
-    ssd1306_printFixed(0, 32, buf, STYLE_NORMAL);
-    sprintf(buf, "%i %i %i %i", val5, val6, val7, val8);
-    ssd1306_printFixed(0, 40, buf, STYLE_NORMAL);
-    sprintf(buf, "%i %i %i %i", val9, val10, val11, val12);
-    ssd1306_printFixed(0, 48, buf, STYLE_NORMAL);
-    sprintf(buf, "%i %i %i %i", val13, val14, val15, val16);
-    ssd1306_printFixed(0, 56, buf, STYLE_NORMAL);
-    */
+    readAnalogs();
 
-    // BAT_IN
-    sensorValue0 = analogReadFast(BAT_IN);
-    battery_voltage = sensorValue0 * VOLTAGE_SCALE;
-    dtostrf(battery_voltage, 3, 1, line_buffer);
-    sprintf(buf, "BAT:%sV ", line_buffer);
-    ssd1306_printFixed(0, 8, buf, STYLE_NORMAL);
-    
-    // AUX1_PORT
-    sensorValue0 = analogReadFast(AUX1_PORT);
-    sprintf(buf, "AUX:%04i", sensorValue0);
-    ssd1306_printFixed(64, 56, buf, STYLE_NORMAL);
+    // Display the animation and info about the settings
+    showGimbals();
 
-    // Trigger menu if val3 and val8 is true
-    if(val4 == 1 && val7 == 1) {
+    // Trigger menu if lgimbal_right and rgimbal_left
+    if(lgimbal_right == 1 && rgimbal_left == 1) {
         showMenu();
     }
-    /*
-    // TODO: Testing changing mode from here
-    if(val14 == 0) {
-        txmode = 0;
-    } else {
-        txmode = 1;
-    }
-    */
 
     // Processing data and sending
     txData();
+}
+
+void showGimbals() {
+    /*
+     *  [|----------][-----|-----]
+     *  [-----|-----][-----|-----]
+     */
+    uint8_t throttleBarValue = throttleValue * 0.016;
+    drawBars(0, 17, 17, throttleBarValue);
+    uint8_t rudderBarValue = rudderValue * 0.016;
+    drawBars(0, 25, 17, rudderBarValue);
+    uint8_t elevatorBarValue = elevatorValue * 0.016;
+    drawBars(0, 33, 17, elevatorBarValue);
+    uint8_t aileronBarValue = aileronValue * 0.016;
+    drawBars(0, 41, 17, aileronBarValue);
+}
+
+void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position) {
+    sprintf(buf, "T", throttleValue, rudderValue);
+
+    ssd1306_printFixed(x, y, "[", STYLE_NORMAL);
+    x+=6;
+
+    for(int i = 0; i < max_bars; i++) {
+        if(i != bar_position)
+            ssd1306_printFixed(x + (i * 6), y, "-", STYLE_NORMAL);
+        else
+            ssd1306_printFixed(x + (i * 6), y, "|", STYLE_NORMAL);
+    }
     
-    delay(1);
+    ssd1306_printFixed(x + (max_bars * 6), y, "]", STYLE_NORMAL);
 }
 
 /*
@@ -545,37 +569,107 @@ void txData() {
     radio.write(&data, sizeof(MyData));
 }
 
+/*
+ *  Display Menu
+ */
 void showMenu() {
     ssd1306_fillScreen(0x00);
     ssd1306_createMenu(&menu, menuItems, sizeof(menuItems) / sizeof(char *));
     ssd1306_showMenu(&menu);
 
-    while(txmode == 0) {
+    uint8_t itemSelected = 0;
+    while(itemSelected == 0) {
         readSwitches();
 
-        if(val6 == 1) {
+        if(rgimbal_down == 1) {
             ssd1306_menuDown(&menu);
             ssd1306_updateMenu(&menu);
         }
 
-        if(val5 == 1) {
+        if(rgimbal_up == 1) {
             ssd1306_menuUp(&menu);
             ssd1306_updateMenu(&menu);
         }
 
-        if(val8 == 1) {
+        if(rgimbal_right == 1) {
+            itemSelected = 1;
             uint8_t selectedItem = ssd1306_menuSelection(&menu);
             // Only two items. So is 0 and 1....
             if(selectedItem == 0) {
                 txmode = 1;
-                break;
+                return;
             }
             if(selectedItem == 1) {
-                showHeader();
-                break;
+                txmode = 2;
+
+                showHeaderDebug();
+                return;
+            }
+            if(selectedItem == 2) {
+                txmode = 0;
+                
+                showHeaderMain();
+                return;
             }
         }
-        delay(100);
     }
 }
 
+/*
+ *  Debug keys
+ */
+void debugKeys() {
+    readSwitches();
+    readAnalogs();
+
+    sprintf(buf, "T:%04i R:%04i", throttleValue, rudderValue);
+    ssd1306_printFixed(0, 16, buf, STYLE_NORMAL);
+
+    sprintf(buf, "A:%04i E:%04i", aileronValue, elevatorValue);
+    ssd1306_printFixed(0, 24, buf, STYLE_NORMAL);
+  
+    // Battery Calculation
+    float batteryVoltage = batteryVoltageValue * VOLTAGE_SCALE;
+    dtostrf(batteryVoltage, 3, 1, line_buffer);
+    sprintf(buf, "BAT:%sV ", line_buffer);
+    ssd1306_printFixed(64, 32, buf, STYLE_NORMAL);
+    
+    // AUX1_PORT
+    sprintf(buf, "AUX:%04i", channelCValue);
+    ssd1306_printFixed(64, 56, buf, STYLE_NORMAL);
+
+    sprintf(buf, "%i %i   %i", sw_a, sw_b, sw_d);
+    ssd1306_printFixed(0, 32, buf, STYLE_NORMAL);
+    sprintf(buf, "%i %i %i %i", sw_e, sw_f, sw_g, sw_h);
+    ssd1306_printFixed(0, 40, buf, STYLE_NORMAL);
+    sprintf(buf, "%i %i %i %i", lgimbal_up, lgimbal_down, lgimbal_left, lgimbal_right);
+    ssd1306_printFixed(0, 48, buf, STYLE_NORMAL);
+    sprintf(buf, "%i %i %i %i", rgimbal_up, rgimbal_down, rgimbal_left, rgimbal_right);
+    ssd1306_printFixed(0, 56, buf, STYLE_NORMAL);
+
+    if(rgimbal_right == 1 && lgimbal_left == 1) {
+        txmode = 0;
+        ssd1306_fillScreen(0x00);
+        showHeaderMain();
+        return;
+    }
+}
+
+void showHeaderMain() {
+    showHeader(0, 0, "ECHOWII TX", 1);
+}
+
+void showHeaderDebug() {
+    showHeader(0, 0, "[ DEBUG MODE ]", 0);
+}
+
+void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style) {
+    ssd1306_fillScreen(0x00);
+    if(style == 0) {
+        ssd1306_setFixedFont(ssd1306xled_font6x8);
+        ssd1306_printFixed(x, y, title, STYLE_NORMAL);
+    } else if(style == 1) {
+        ssd1306_setFixedFont(ssd1306xled_font6x8);
+        ssd1306_printFixedN(x, y, title, STYLE_NORMAL, 1);
+    }
+}
