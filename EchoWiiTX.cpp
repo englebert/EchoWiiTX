@@ -3,9 +3,10 @@
  */
 #include "Arduino.h"
 #include "EchoWiiTX.h"
-#include "LCD.h"
+#include "echowiitx_logo.h"
 #include "ssd1306_fonts.h"
 #include "ssd1306_1bit.h"
+#include "ssd1306.h"
 
 #include <avdweb_AnalogReadFast.h>
 
@@ -34,7 +35,8 @@ char keys[ROWS][COLS] = {
 byte rowPins[ROWS] = {3, 2, 1, 0}; //connect to the row pinouts of the kpd
 byte colPins[COLS] = {7, 6, 5, 4}; //connect to the column pinouts of the kpd
 Keypad kpd = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
-unsigned long loopCount;
+
+uint16_t loopCount;
 unsigned long startTime;
 
 /*
@@ -239,8 +241,8 @@ void scanChannels() {
         }
 
         // Displaying Results
-        negativeMode();
-        drawLine(i, 55, i, 16);
+        ssd1306_negativeMode();
+        ssd1306_drawLine(i, 54, i, 16);
         // ssd1306_clearBlock(i, 24, 1, 16);
         if(channel_loads > 0) {
             // Using only 38 pixels of y
@@ -251,8 +253,8 @@ void scanChannels() {
             uint8_t y = channel_loads * 0.19;
             y = 54 - y;;
             // Draw current line
-            positiveMode();
-            drawLine(i, 54, i, y);    
+            ssd1306_positiveMode();
+            ssd1306_drawLine(i, 54, i, y);    
         }
 
         readSwitches();
@@ -338,6 +340,14 @@ void readEEPROM() {
 }
 
 /*
+ * Start Up Logo
+ */
+void showLogo() {
+    ssd1306_drawBitmap(0, 0, 128, 64, echowiitx_logo);
+    // ssd1306_printFixed(0, 32, "EchoWiiTX", STYLE_NORMAL);
+}
+
+/*
  *  Arduino Setup
  */
 void setup() {
@@ -357,9 +367,13 @@ void setup() {
     setup_radio();
     
     // Initializing OLED and display logo
-    LCDInit();
+    // LCDInit();
+    ssd1306_128x64_i2c_init();
     // show_logo();
     // delay(2000);
+
+    // Initialize keyboard loopCount to zero
+    loopCount = 0;
 
     showHeaderMain();
 }
@@ -462,21 +476,21 @@ void readSwitches() {
                 // else if(kpd.key[i].kchar == '5') lgimbal_up = 0;
             } else if(kpd.key[i].kstate == IDLE) {
                 // msg = msg + kpd.key[i].kchar + "I ";
-                if(kpd.key[i].kchar == 'A') sw_a = 5;
-                else if(kpd.key[i].kchar == 'B') sw_b = 5;
-                else if(kpd.key[i].kchar == 'D') sw_d = 5;
-                else if(kpd.key[i].kchar == 'E') sw_e = 5;
-                else if(kpd.key[i].kchar == 'F') sw_f = 5;
-                else if(kpd.key[i].kchar == 'G') sw_g = 5;
-                else if(kpd.key[i].kchar == 'H') sw_h = 5;
-                else if(kpd.key[i].kchar == 'I') rgimbal_up = 5;
-                else if(kpd.key[i].kchar == 'J') rgimbal_left = 5;
-                else if(kpd.key[i].kchar == 'K') rgimbal_down = 5;
-                else if(kpd.key[i].kchar == 'L') rgimbal_right = 5;
-                else if(kpd.key[i].kchar == '1') lgimbal_left = 5;
-                else if(kpd.key[i].kchar == '2') lgimbal_down = 5;
-                else if(kpd.key[i].kchar == '3') lgimbal_right = 5;
-                else if(kpd.key[i].kchar == '5') lgimbal_up = 5;
+                if(kpd.key[i].kchar == 'A') sw_a = 0;
+                else if(kpd.key[i].kchar == 'B') sw_b = 0;
+                else if(kpd.key[i].kchar == 'D') sw_d = 0;
+                else if(kpd.key[i].kchar == 'E') sw_e = 0;
+                else if(kpd.key[i].kchar == 'F') sw_f = 0;
+                else if(kpd.key[i].kchar == 'G') sw_g = 0;
+                else if(kpd.key[i].kchar == 'H') sw_h = 0;
+                else if(kpd.key[i].kchar == 'I') rgimbal_up = 0;
+                else if(kpd.key[i].kchar == 'J') rgimbal_left = 0;
+                else if(kpd.key[i].kchar == 'K') rgimbal_down = 0;
+                else if(kpd.key[i].kchar == 'L') rgimbal_right = 0;
+                else if(kpd.key[i].kchar == '1') lgimbal_left = 0;
+                else if(kpd.key[i].kchar == '2') lgimbal_down = 0;
+                else if(kpd.key[i].kchar == '3') lgimbal_right = 0;
+                else if(kpd.key[i].kchar == '0') lgimbal_up = 0;
             }
         }
     }
@@ -505,6 +519,9 @@ void readAnalogs() {
     channelCValue = analogReadFast(AUX1_PORT);
 }
 
+/*
+ * Continuos transmission
+ */
 void txMode() {
     readSwitches();
     readAnalogs();
@@ -578,8 +595,19 @@ void showMenu() {
     ssd1306_showMenu(&menu);
 
     uint8_t itemSelected = 0;
+
+    loopCount = 0;
+
     while(itemSelected == 0) {
         readSwitches();
+
+        if(loopCount != 0) {
+            loopCount++;
+            if(loopCount >= 15000) loopCount = 0;
+            continue;
+        }
+
+        loopCount++;
 
         if(rgimbal_down == 1) {
             ssd1306_menuDown(&menu);

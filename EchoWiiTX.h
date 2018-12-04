@@ -18,6 +18,7 @@ void setup_inputs();
 void setup_radio();
 void showRFScanMode();
 void showMenu();
+void showLogo();
 void showGimbals();
 void txData();
 void txMode();
@@ -35,10 +36,9 @@ uint8_t checksum();
 
 void showHeaderMain();
 void showHeaderDebug();
-// void showHeader(uint8_t x, uint8_t y, const char *title);
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
 
-// Reading analogue values.
+/* Reading analogue values. */
 uint16_t throttleValue, rudderValue, elevatorValue, aileronValue;
 uint16_t batteryVoltageValue, channelCValue;
 
@@ -57,6 +57,10 @@ uint16_t elevator_lower_limit = 100;
 uint16_t aileron_upper_limit = 900;
 uint16_t aileron_lower_limit = 100;
 
+/* For counter checking eeprom checksum */
 uint8_t eeprom_checksum;
+
+/* For preventing too sensitive on the switch */
+uint8_t switches_state = 0;
 
 #endif
