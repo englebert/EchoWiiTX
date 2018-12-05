@@ -12,10 +12,12 @@ void readSwitches();
 void(* resetFunc) (void) = 0;
 void rfscanMode();
 void debugKeys();
+void detectExit();
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position);
 void scanChannels();
 void setup_inputs();
 void setup_radio();
+void setupMode();
 void showRFScanMode();
 void showMenu();
 void showLogo();
@@ -34,8 +36,12 @@ void EEPROMWrite16Bits(uint16_t addr, uint16_t value);
 uint16_t EEPROMRead16Bits(uint16_t addr);
 uint8_t checksum();
 
+/* Skip some processes */
+uint8_t shortDelay();
+
 void showHeaderMain();
 void showHeaderDebug();
+void showHeaderSetup();
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
 
 /* Reading analogue values. */

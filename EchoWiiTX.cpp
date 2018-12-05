@@ -77,8 +77,15 @@ MyData data;
 const char *menuItems[] = {
     " RF Scanner",
     " Debug Keys",
+    " Setup",
     " Exit"
 };
+
+// Menu definitions
+#define RFSCANNER 1
+#define DEBUGKEYS 2
+#define SETUP 3
+#define TXMODE 0
 
 // Default mode = 0
 // MODE:
@@ -343,7 +350,7 @@ void readEEPROM() {
  * Start Up Logo
  */
 void showLogo() {
-    ssd1306_drawBitmap(0, 0, 128, 64, echowiitx_logo);
+    ssd1306_drawBitmap(0, 2, 128, 45, echowiitx_logo);
     // ssd1306_printFixed(0, 32, "EchoWiiTX", STYLE_NORMAL);
 }
 
@@ -369,8 +376,11 @@ void setup() {
     // Initializing OLED and display logo
     // LCDInit();
     ssd1306_128x64_i2c_init();
-    // show_logo();
-    // delay(2000);
+    // ssd1306_vga_controller_init();
+    // sd1306_clearScreen();
+    ssd1306_fillScreen(0x00);
+    showLogo();
+    delay(2000);
 
     // Initialize keyboard loopCount to zero
     loopCount = 0;
@@ -408,11 +418,13 @@ void setup_radio() {
  * Arduino Main Loop
  */
 void loop() {
-    if(txmode == 0) {
+    if(txmode == TXMODE) {
         txMode();
-    } else if(txmode == 1) {
+    } else if(txmode == RFSCANNER) {
         rfscanMode();
-    } else if(txmode == 2) {
+    } else if(txmode == SETUP) {
+        setupMode();
+    } else if(txmode == DEBUGKEYS) {
         debugKeys();
     }
 }
@@ -543,13 +555,13 @@ void showGimbals() {
      *  [|----------][-----|-----]
      *  [-----|-----][-----|-----]
      */
-    uint8_t throttleBarValue = throttleValue * 0.016;
+    uint16_t throttleBarValue = (throttleValue - 1000) * 0.016;
     drawBars(0, 17, 17, throttleBarValue);
-    uint8_t rudderBarValue = rudderValue * 0.016;
+    uint16_t rudderBarValue = (rudderValue - 1000)* 0.016;
     drawBars(0, 25, 17, rudderBarValue);
-    uint8_t elevatorBarValue = elevatorValue * 0.016;
+    uint16_t elevatorBarValue = (elevatorValue - 1000) * 0.016;
     drawBars(0, 33, 17, elevatorBarValue);
-    uint8_t aileronBarValue = aileronValue * 0.016;
+    uint16_t aileronBarValue = (aileronValue - 1000)* 0.016;
     drawBars(0, 41, 17, aileronBarValue);
 }
 
@@ -587,6 +599,22 @@ void txData() {
 }
 
 /*
+ * Just to skip some processes
+ */
+uint8_t shortDelay() {
+    if(loopCount != 0) {
+        loopCount++;
+        if(loopCount >= 15000) {
+            loopCount = 0;
+            return 1;
+        }
+    } else {
+        loopCount++;
+    }
+    return 0;
+}
+
+/*
  *  Display Menu
  */
 void showMenu() {
@@ -601,13 +629,8 @@ void showMenu() {
     while(itemSelected == 0) {
         readSwitches();
 
-        if(loopCount != 0) {
-            loopCount++;
-            if(loopCount >= 15000) loopCount = 0;
-            continue;
-        }
-
-        loopCount++;
+        // Skip for a while
+        if(shortDelay() == 0) continue;
 
         if(rgimbal_down == 1) {
             ssd1306_menuDown(&menu);
@@ -624,24 +647,106 @@ void showMenu() {
             uint8_t selectedItem = ssd1306_menuSelection(&menu);
             // Only two items. So is 0 and 1....
             if(selectedItem == 0) {
-                txmode = 1;
+                txmode = RFSCANNER;
                 return;
-            }
-            if(selectedItem == 1) {
-                txmode = 2;
-
+            } else if(selectedItem == 1) {
+                txmode = DEBUGKEYS;
                 showHeaderDebug();
                 return;
-            }
-            if(selectedItem == 2) {
-                txmode = 0;
-                
+            } else if(selectedItem == 2) {
+                txmode = SETUP;
+                showHeaderSetup();
+                return;
+            } else if(selectedItem == 3) {
+                txmode = TXMODE;
                 showHeaderMain();
                 return;
             }
         }
     }
 }
+
+
+/*
+ * Setup Menu
+ */
+uint8_t current_setup_page = 0;
+uint8_t current_setup_selected = 0;
+uint8_t setup_menu_refreshed = 0;
+
+const char *menuItemsSetup[] = {
+    "Model Setup",
+    "Timers",
+    "E.Limits",
+    "E.Trim",
+    "Reverse",
+    "Mapping",
+    "Expo",
+    "Exit"
+};
+
+void setupMode() {
+    readSwitches();
+
+    // Skip for a while
+    if(shortDelay() == 0) return;
+
+    // Refreshing screen
+    if(rgimbal_up == 1 || rgimbal_down == 1) {
+        setup_menu_refreshed = 0;
+    }
+    
+    // Cursor calculation
+    uint8_t y = 17;
+    if(rgimbal_down == 1) {
+        current_setup_selected++;
+        if(current_setup_selected > 6) {
+            current_setup_page++;
+            y = 57;
+        } else {
+            y = y + (current_setup_selected * 8);
+        }
+        if(current_setup_page > 2) current_setup_page = 2;
+    } else if(rgimbal_up == 1) {
+        current_setup_selected--;
+        if(current_setup_selected  0) {
+            current_setup_page--;
+        }
+    }
+
+    if(setup_menu_refreshed == 1) return;
+
+    // Print current setup page
+    sprintf(buf, "%i", current_setup_page);
+    ssd1306_printFixed(120, 0, buf, STYLE_NORMAL);
+
+    // Based on pages show the menus
+    uint8_t max_setup_items = current_setup_page + 5;
+    uint8_t min_setup_items = current_setup_page;
+    uint8_t j = 0;
+
+    for(uint8_t i = min_setup_items; i <= max_setup_items; i++) {
+        // Clear previous line
+        ssd1306_printFixed(0, 17 + (j * 8), "           ", STYLE_NORMAL);
+        // Print Menu
+        ssd1306_printFixed(8, 17 + (j * 8), menuItemsSetup[i], STYLE_NORMAL);
+        j++;
+    }
+
+    // Print cursor
+    ssd1306_printFixed(0, y, ">", STYLE_NORMAL);
+
+    setup_menu_refreshed = 1;
+
+    /*
+    if(rgimbal_up == 1 || rgimbal_down == 1) {
+        showHeaderSetup();
+    }
+    */
+    // Tobe removed... 
+    detectExit();
+}
+
 
 /*
  *  Debug keys
@@ -675,12 +780,20 @@ void debugKeys() {
     sprintf(buf, "%i %i %i %i", rgimbal_up, rgimbal_down, rgimbal_left, rgimbal_right);
     ssd1306_printFixed(0, 56, buf, STYLE_NORMAL);
 
+    detectExit();
+}
+
+void detectExit() {
     if(rgimbal_right == 1 && lgimbal_left == 1) {
-        txmode = 0;
+        txmode = TXMODE;
         ssd1306_fillScreen(0x00);
         showHeaderMain();
         return;
     }
+}
+
+void showHeaderSetup() {
+    showHeader(0, 0, "SETUP", 1);
 }
 
 void showHeaderMain() {
