@@ -543,7 +543,9 @@ void txMode() {
 
     // Trigger menu if lgimbal_right and rgimbal_left
     if(lgimbal_right == 1 && rgimbal_left == 1) {
-        showMenu();
+        txmode = SETUP;
+        showHeaderSetup();
+        return;
     }
 
     // Processing data and sending
@@ -615,59 +617,6 @@ uint8_t shortDelay() {
 }
 
 /*
- *  Display Menu
- */
-void showMenu() {
-    ssd1306_fillScreen(0x00);
-    ssd1306_createMenu(&menu, menuItems, sizeof(menuItems) / sizeof(char *));
-    ssd1306_showMenu(&menu);
-
-    uint8_t itemSelected = 0;
-
-    loopCount = 0;
-
-    while(itemSelected == 0) {
-        readSwitches();
-
-        // Skip for a while
-        if(shortDelay() == 0) continue;
-
-        if(rgimbal_down == 1) {
-            ssd1306_menuDown(&menu);
-            ssd1306_updateMenu(&menu);
-        }
-
-        if(rgimbal_up == 1) {
-            ssd1306_menuUp(&menu);
-            ssd1306_updateMenu(&menu);
-        }
-
-        if(rgimbal_right == 1) {
-            itemSelected = 1;
-            uint8_t selectedItem = ssd1306_menuSelection(&menu);
-            // Only two items. So is 0 and 1....
-            if(selectedItem == 0) {
-                txmode = RFSCANNER;
-                return;
-            } else if(selectedItem == 1) {
-                txmode = DEBUGKEYS;
-                showHeaderDebug();
-                return;
-            } else if(selectedItem == 2) {
-                txmode = SETUP;
-                showHeaderSetup();
-                return;
-            } else if(selectedItem == 3) {
-                txmode = TXMODE;
-                showHeaderMain();
-                return;
-            }
-        }
-    }
-}
-
-
-/*
  * Setup Menu
  */
 uint8_t current_setup_page = 0;
@@ -682,8 +631,18 @@ const char *menuItemsSetup[] = {
     "Reverse",
     "Mapping",
     "Expo",
+    "RF Scanner",
+    "Keys Debugger",
+    "About",
     "Exit"
 };
+
+#define MENU_SETUP_RF_SCANNER 7
+#define MENU_SETUP_KEYS_DEBUGGER 8
+#define MENU_SETUP_EXIT 10
+
+uint8_t max_items_setup = (sizeof(menuItemsSetup) / sizeof(char *)) - 1;
+uint8_t max_page_setup = max_items_setup - 5;
 
 void setupMode() {
     readSwitches();
@@ -697,28 +656,53 @@ void setupMode() {
     }
     
     // Cursor calculation
-    uint8_t y = 17;
+    uint8_t y;
     if(rgimbal_down == 1) {
         current_setup_selected++;
-        if(current_setup_selected > 6) {
+
+        // Limiter
+        if(current_setup_selected >= max_items_setup)
+            current_setup_selected = max_items_setup;
+
+        if(current_setup_selected > 5) {
             current_setup_page++;
-            y = 57;
-        } else {
-            y = y + (current_setup_selected * 8);
         }
-        if(current_setup_page > 2) current_setup_page = 2;
+
+        if(current_setup_page > max_page_setup) current_setup_page = max_page_setup;
     } else if(rgimbal_up == 1) {
-        current_setup_selected--;
-        if(current_setup_selected  0) {
+        if(current_setup_selected > 0)
+            current_setup_selected--;
+
+        if(current_setup_selected < 5 && current_setup_page != 0) {
             current_setup_page--;
+        }
+
+    // Menu selected and check which is being selected.
+    } else if(rgimbal_right == 1) {
+        if(current_setup_selected == MENU_SETUP_EXIT) {
+            // current_setup_selected = 0;
+            // current_setup_page = 0;
+            setup_menu_refreshed = 0;
+            txmode = TXMODE;
+            showHeaderMain();
+            return;
+        } else if(current_setup_selected == MENU_SETUP_KEYS_DEBUGGER) {
+            setup_menu_refreshed = 0;
+            txmode = DEBUGKEYS;
+            showHeaderDebug();
+            return;
+        } else if(current_setup_selected == MENU_SETUP_RF_SCANNER) {
+            setup_menu_refreshed = 0;
+            txmode = RFSCANNER;
+            return;
         }
     }
 
     if(setup_menu_refreshed == 1) return;
 
     // Print current setup page
-    sprintf(buf, "%i", current_setup_page);
-    ssd1306_printFixed(120, 0, buf, STYLE_NORMAL);
+    sprintf(buf, "%i/%i", current_setup_selected, max_page_setup);
+    ssd1306_printFixed(100, 0, buf, STYLE_NORMAL);
 
     // Based on pages show the menus
     uint8_t max_setup_items = current_setup_page + 5;
@@ -727,24 +711,17 @@ void setupMode() {
 
     for(uint8_t i = min_setup_items; i <= max_setup_items; i++) {
         // Clear previous line
-        ssd1306_printFixed(0, 17 + (j * 8), "           ", STYLE_NORMAL);
+        ssd1306_printFixed(0, 17 + (j * 8), "               ", STYLE_NORMAL);
         // Print Menu
         ssd1306_printFixed(8, 17 + (j * 8), menuItemsSetup[i], STYLE_NORMAL);
+        // Print cursor
+        if(i == current_setup_selected) {
+            ssd1306_printFixed(0, 17 + (j * 8), ">", STYLE_NORMAL);
+        }
         j++;
     }
 
-    // Print cursor
-    ssd1306_printFixed(0, y, ">", STYLE_NORMAL);
-
     setup_menu_refreshed = 1;
-
-    /*
-    if(rgimbal_up == 1 || rgimbal_down == 1) {
-        showHeaderSetup();
-    }
-    */
-    // Tobe removed... 
-    detectExit();
 }
 
 
@@ -785,9 +762,8 @@ void debugKeys() {
 
 void detectExit() {
     if(rgimbal_right == 1 && lgimbal_left == 1) {
-        txmode = TXMODE;
-        ssd1306_fillScreen(0x00);
-        showHeaderMain();
+        txmode = SETUP;
+        showHeaderSetup();
         return;
     }
 }

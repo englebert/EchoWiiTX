@@ -19,7 +19,6 @@ void setup_inputs();
 void setup_radio();
 void setupMode();
 void showRFScanMode();
-void showMenu();
 void showLogo();
 void showGimbals();
 void txData();
