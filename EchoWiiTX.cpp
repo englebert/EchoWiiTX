@@ -193,7 +193,7 @@ void rfscanMode() {
     showRFScanMode();
 
     // Forever here... till the switch position changed.
-    while(txmode == 1) {
+    while(txmode == MENU_SETUP_RF_SCANNER) {
         scanChannels();
     }
 }
@@ -747,7 +747,7 @@ void elimits() {
     aileronValue = analogReadFast(AILERON_PORT);
     elevatorValue = analogReadFast(ELEVATOR_PORT);
 
-    ssd1306_printFixed(0, 17, "Tuning the sticks", STYLE_NORMAL);
+    ssd1306_printFixed(0, 17, "UP: Reset Right: Save", STYLE_NORMAL);
 
     // Getting the min and max values of each sticks
     if(throttle_upper_limit < throttleValue) throttle_upper_limit = throttleValue;
@@ -759,14 +759,16 @@ void elimits() {
     if(aileron_upper_limit < aileronValue) aileron_upper_limit = aileronValue;
     if(aileron_lower_limit > aileronValue) aileron_lower_limit = aileronValue;
 
+    uint8_t x = 8;
+
     sprintf(buf, "TL:%04i TU:%04i", throttle_lower_limit, throttle_upper_limit);
-    ssd1306_printFixed(16, 32, buf, STYLE_NORMAL);
+    ssd1306_printFixed(x, 32, buf, STYLE_NORMAL);
     sprintf(buf, "RL:%04i RU:%04i", rudder_lower_limit, rudder_upper_limit);
-    ssd1306_printFixed(16, 40, buf, STYLE_NORMAL);
+    ssd1306_printFixed(x, 40, buf, STYLE_NORMAL);
     sprintf(buf, "EL:%04i EU:%04i", elevator_lower_limit, elevator_upper_limit);
-    ssd1306_printFixed(16, 48, buf, STYLE_NORMAL);
+    ssd1306_printFixed(x, 48, buf, STYLE_NORMAL);
     sprintf(buf, "AL:%04i AU:%04i", aileron_lower_limit, aileron_upper_limit);
-    ssd1306_printFixed(16, 56, buf, STYLE_NORMAL);
+    ssd1306_printFixed(x, 56, buf, STYLE_NORMAL);
 
     // Save settings
     if(rgimbal_right == 1) {
