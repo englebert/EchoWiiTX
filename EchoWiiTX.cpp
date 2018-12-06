@@ -73,19 +73,13 @@ struct MyData {
 };
 MyData data;
 
-// Define menu items
-const char *menuItems[] = {
-    " RF Scanner",
-    " Debug Keys",
-    " Setup",
-    " Exit"
-};
-
-// Menu definitions
-#define RFSCANNER 1
-#define DEBUGKEYS 2
-#define SETUP 3
-#define TXMODE 0
+/* Menu definitions */
+#define TXMODE                   0
+#define MENU_SETUP               99
+#define MENU_SETUP_ELIMIT        2
+#define MENU_SETUP_RF_SCANNER    7
+#define MENU_SETUP_KEYS_DEBUGGER 8
+#define MENU_SETUP_EXIT          10
 
 // Default mode = 0
 // MODE:
@@ -94,8 +88,6 @@ const char *menuItems[] = {
 uint8_t txmode = 0;
 
 uint8_t trimUpdates = 1;
-
-SAppMenu menu;
 
 /**
  * Configurations and Values
@@ -420,11 +412,11 @@ void setup_radio() {
 void loop() {
     if(txmode == TXMODE) {
         txMode();
-    } else if(txmode == RFSCANNER) {
+    } else if(txmode == MENU_SETUP_RF_SCANNER) {
         rfscanMode();
-    } else if(txmode == SETUP) {
+    } else if(txmode == MENU_SETUP) {
         setupMode();
-    } else if(txmode == DEBUGKEYS) {
+    } else if(txmode == MENU_SETUP_KEYS_DEBUGGER) {
         debugKeys();
     }
 }
@@ -543,7 +535,7 @@ void txMode() {
 
     // Trigger menu if lgimbal_right and rgimbal_left
     if(lgimbal_right == 1 && rgimbal_left == 1) {
-        txmode = SETUP;
+        txmode = MENU_SETUP;
         showHeaderSetup();
         return;
     }
@@ -637,9 +629,6 @@ const char *menuItemsSetup[] = {
     "Exit"
 };
 
-#define MENU_SETUP_RF_SCANNER 7
-#define MENU_SETUP_KEYS_DEBUGGER 8
-#define MENU_SETUP_EXIT 10
 
 uint8_t max_items_setup = (sizeof(menuItemsSetup) / sizeof(char *)) - 1;
 uint8_t max_page_setup = max_items_setup - 5;
@@ -679,30 +668,26 @@ void setupMode() {
 
     // Menu selected and check which is being selected.
     } else if(rgimbal_right == 1) {
+        setup_menu_refreshed = 0;
         if(current_setup_selected == MENU_SETUP_EXIT) {
             // current_setup_selected = 0;
             // current_setup_page = 0;
-            setup_menu_refreshed = 0;
             txmode = TXMODE;
             showHeaderMain();
             return;
+        } else if(current_setup_selected == MENU_SETUP_ELIMIT) {
+            txmode = MENU_SETUP_ELIMIT;
         } else if(current_setup_selected == MENU_SETUP_KEYS_DEBUGGER) {
-            setup_menu_refreshed = 0;
-            txmode = DEBUGKEYS;
+            txmode = MENU_SETUP_KEYS_DEBUGGER;
             showHeaderDebug();
             return;
         } else if(current_setup_selected == MENU_SETUP_RF_SCANNER) {
-            setup_menu_refreshed = 0;
-            txmode = RFSCANNER;
+            txmode = MENU_SETUP_RF_SCANNER;
             return;
         }
     }
 
     if(setup_menu_refreshed == 1) return;
-
-    // Print current setup page
-    sprintf(buf, "%i/%i", current_setup_selected, max_page_setup);
-    ssd1306_printFixed(100, 0, buf, STYLE_NORMAL);
 
     // Based on pages show the menus
     uint8_t max_setup_items = current_setup_page + 5;
@@ -762,7 +747,7 @@ void debugKeys() {
 
 void detectExit() {
     if(rgimbal_right == 1 && lgimbal_left == 1) {
-        txmode = SETUP;
+        txmode = MENU_SETUP;
         showHeaderSetup();
         return;
     }
