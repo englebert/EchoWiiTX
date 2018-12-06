@@ -10,10 +10,12 @@ void readSwitches();
 
 //declare reset function at address 0
 void(* resetFunc) (void) = 0;
-void rfscanMode();
 void debugKeys();
 void detectExit();
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position);
+void elimits();
+void rfscanMode();
+void saveSettings();
 void scanChannels();
 void setup_inputs();
 void setup_radio();
@@ -38,6 +40,7 @@ uint8_t checksum();
 /* Skip some processes */
 uint8_t shortDelay();
 
+void showHeaderELimits();
 void showHeaderMain();
 void showHeaderDebug();
 void showHeaderSetup();
@@ -53,14 +56,14 @@ uint8_t lgimbal_up, lgimbal_down, lgimbal_left, lgimbal_right;
 uint8_t rgimbal_up, rgimbal_down, rgimbal_left, rgimbal_right;
 
 /* Gimbal's upper limit and lower limit */
-uint16_t throttle_upper_limit = 900;
-uint16_t throttle_lower_limit = 100;
-uint16_t rudder_upper_limit = 900;
-uint16_t rudder_lower_limit = 100;
-uint16_t elevator_upper_limit = 900;
-uint16_t elevator_lower_limit = 100;
-uint16_t aileron_upper_limit = 900;
-uint16_t aileron_lower_limit = 100;
+uint16_t throttle_upper_limit = 600;
+uint16_t throttle_lower_limit = 300;
+uint16_t rudder_upper_limit = 600;
+uint16_t rudder_lower_limit = 300;
+uint16_t elevator_upper_limit = 600;
+uint16_t elevator_lower_limit = 300;
+uint16_t aileron_upper_limit = 600;
+uint16_t aileron_lower_limit = 300;
 
 /* For counter checking eeprom checksum */
 uint8_t eeprom_checksum;

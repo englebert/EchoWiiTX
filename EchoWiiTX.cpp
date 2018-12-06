@@ -334,8 +334,26 @@ void readEEPROM() {
         elevator_lower_limit = EEPROMRead16Bits(0x0008);
         elevator_upper_limit = EEPROMRead16Bits(0x000A);
         aileron_lower_limit = EEPROMRead16Bits(0x000C);
-        aileron_upper_limit = EEPROMRead16Bits(0x000F);
+        aileron_upper_limit = EEPROMRead16Bits(0x000E);
     }
+}
+
+/*
+ * Save settings to EEPROM
+ */
+void saveSettings() {
+    // Pushing the elimits to EEPROM
+    EEPROMWrite16Bits(0x0000, throttle_lower_limit);
+    EEPROMWrite16Bits(0x0002, throttle_upper_limit);
+    EEPROMWrite16Bits(0x0004, rudder_lower_limit);
+    EEPROMWrite16Bits(0x0006, rudder_upper_limit);
+    EEPROMWrite16Bits(0x0008, elevator_lower_limit);
+    EEPROMWrite16Bits(0x000A, elevator_upper_limit);
+    EEPROMWrite16Bits(0x000C, aileron_lower_limit);
+    EEPROMWrite16Bits(0x000E, aileron_upper_limit);
+
+    // Getting the checksum and push the the last bit of the EEPROM
+    EEPROM.write(0x03FF, checksum());
 }
 
 /*
@@ -418,6 +436,8 @@ void loop() {
         setupMode();
     } else if(txmode == MENU_SETUP_KEYS_DEBUGGER) {
         debugKeys();
+    } else if(txmode == MENU_SETUP_ELIMIT) {
+        elimits();
     }
 }
 
@@ -668,6 +688,9 @@ void setupMode() {
 
     // Menu selected and check which is being selected.
     } else if(rgimbal_right == 1) {
+        // Prevent double enter
+        rgimbal_right = 0;
+
         setup_menu_refreshed = 0;
         if(current_setup_selected == MENU_SETUP_EXIT) {
             // current_setup_selected = 0;
@@ -677,6 +700,8 @@ void setupMode() {
             return;
         } else if(current_setup_selected == MENU_SETUP_ELIMIT) {
             txmode = MENU_SETUP_ELIMIT;
+            showHeaderELimits();
+            return;
         } else if(current_setup_selected == MENU_SETUP_KEYS_DEBUGGER) {
             txmode = MENU_SETUP_KEYS_DEBUGGER;
             showHeaderDebug();
@@ -709,6 +734,63 @@ void setupMode() {
     setup_menu_refreshed = 1;
 }
 
+/*
+ * Setting E-Limits on both of the gimbals
+ */
+void elimits() {
+    readSwitches();
+    readAnalogs();
+
+    // Gimbal readings - Not using the common functions since this not requires mapping
+    throttleValue = analogReadFast(THROTTLE_PORT);
+    rudderValue = analogReadFast(RUDDER_PORT);
+    aileronValue = analogReadFast(AILERON_PORT);
+    elevatorValue = analogReadFast(ELEVATOR_PORT);
+
+    ssd1306_printFixed(0, 17, "Tuning the sticks", STYLE_NORMAL);
+
+    // Getting the min and max values of each sticks
+    if(throttle_upper_limit < throttleValue) throttle_upper_limit = throttleValue;
+    if(throttle_lower_limit > throttleValue) throttle_lower_limit = throttleValue;
+    if(rudder_upper_limit < rudderValue) rudder_upper_limit = rudderValue;
+    if(rudder_lower_limit > rudderValue) rudder_lower_limit = rudderValue;
+    if(elevator_upper_limit < elevatorValue) elevator_upper_limit = elevatorValue;
+    if(elevator_lower_limit > elevatorValue) elevator_lower_limit = elevatorValue;
+    if(aileron_upper_limit < aileronValue) aileron_upper_limit = aileronValue;
+    if(aileron_lower_limit > aileronValue) aileron_lower_limit = aileronValue;
+
+    sprintf(buf, "TL:%04i TU:%04i", throttle_lower_limit, throttle_upper_limit);
+    ssd1306_printFixed(16, 32, buf, STYLE_NORMAL);
+    sprintf(buf, "RL:%04i RU:%04i", rudder_lower_limit, rudder_upper_limit);
+    ssd1306_printFixed(16, 40, buf, STYLE_NORMAL);
+    sprintf(buf, "EL:%04i EU:%04i", elevator_lower_limit, elevator_upper_limit);
+    ssd1306_printFixed(16, 48, buf, STYLE_NORMAL);
+    sprintf(buf, "AL:%04i AU:%04i", aileron_lower_limit, aileron_upper_limit);
+    ssd1306_printFixed(16, 56, buf, STYLE_NORMAL);
+
+    // Save settings
+    if(rgimbal_right == 1) {
+        saveSettings();
+
+        // Return to main menu
+        txmode = MENU_SETUP;
+        showHeaderSetup();
+        return;
+    }
+
+    // Default elimits
+    if(rgimbal_up == 1) {
+         throttle_upper_limit = 600;
+         throttle_lower_limit = 300;
+         rudder_upper_limit = 600;
+         rudder_lower_limit = 300;
+         elevator_upper_limit = 600;
+         elevator_lower_limit = 300;
+         aileron_upper_limit = 600;
+         aileron_lower_limit = 300;
+    }   
+    
+}
 
 /*
  *  Debug keys
@@ -751,6 +833,13 @@ void detectExit() {
         showHeaderSetup();
         return;
     }
+}
+
+/*
+ * Headers of the Menu
+ */
+void showHeaderELimits() {
+    showHeader(0, 0, "E.LIMITS", 1);
 }
 
 void showHeaderSetup() {
