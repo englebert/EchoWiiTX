@@ -14,12 +14,12 @@ EEPROM Format Design:
 +------------+-----------------------------------------+--------+
 |ThrottleMin | The minimum value of the Throttle value | 0x0000 |
 |ThrottleMax | The maximum value of the Throttle value | 0x0002 |
-|RudderMin   | The minumum value of the Rudder value   | 0x0004 |
-|RudderMax   | The maximum value of the Rudder value   | 0x0006 |
-|ElevatorMin | The miminum value of the Elevator value | 0x0008 |
-|ElevatorMax | The maximum value of the Elevator value | 0x000A |
-|AileronMin: | The minimum value of the Aileron value  | 0x000C |
-|AileronMax  | The maximum value of the Aileron value  | 0x000E |
+|YawMin      | The minumum value of the Yaw value      | 0x0004 |
+|YawMax      | The maximum value of the Yaw value      | 0x0006 |
+|PitchMin    | The miminum value of the Pitch value    | 0x0008 |
+|PitchMax    | The maximum value of the Pitch value    | 0x000A |
+|RollMin     | The minimum value of the Roll value     | 0x000C |
+|RollMax     | The maximum value of the Roll value     | 0x000E |
 |            |                                         |        |
 |checksum    | The EEPROM CHECKSUM value               | 0x03FF |
 +------------+-----------------------------------------+--------+
@@ -28,3 +28,8 @@ EEPROM Format Design:
 
 
 By Englebert.
+
+Ref:
+Timers and Interrupts:
+https://www.robotshop.com/community/forum/t/arduino-101-timers-and-interrupts/13072
+https://arduinodiy.wordpress.com/2012/02/28/timer-interrupts/
