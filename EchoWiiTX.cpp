@@ -37,7 +37,6 @@ byte colPins[COLS] = {7, 6, 5, 4}; //connect to the column pinouts of the kpd
 Keypad kpd = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
 uint16_t loopCount;
-unsigned long startTime;
 
 /*
  * NRF24L01 Configurations
@@ -62,14 +61,14 @@ RF24 radio(9, 10);                        // D9 -> Enable, D10 -> CSN pin
 int channel_loads;
 
 struct MyData {
-    unsigned int ch1;
-    unsigned int ch2;
-    unsigned int ch3;
-    unsigned int ch4;
-    unsigned int ch5;
-    unsigned int ch6;
-    unsigned int ch7;
-    unsigned int ch8;
+    uint8_t ch1;
+    uint8_t ch2;
+    uint8_t ch3;
+    uint8_t ch4;
+    uint8_t ch5;
+    uint8_t ch6;
+    uint8_t ch7;
+    uint8_t ch8;
 };
 MyData data;
 
@@ -89,15 +88,20 @@ uint8_t txmode = 0;
 
 uint8_t trimUpdates = 1;
 
+// Total Cycle TX
+uint16_t txTotalPackets = 0;
+uint16_t txPackets = 0;
+uint8_t interrupt_ticks = 0;
+
 /**
  * Configurations and Values
  */
 
 // Joysticks
 #define THROTTLE_PORT A0
-#define RUDDER_PORT   A1
-#define ELEVATOR_PORT A3
-#define AILERON_PORT  A2
+#define YAW_PORT   A1
+#define PITCH_PORT A3
+#define ROLL_PORT  A2
 
 // Analogue Ports
 #define AUX1_PORT     A6
@@ -199,17 +203,19 @@ void rfscanMode() {
 }
 
 void showRFScanMode() {
-    showHeader(16, 0, "[ 2.4G Scanner ]", 0);
+    // showHeader(16, 0, "[ 2.4G Scanner ]", 0);
 
     // Preparing outlines...
-    ssd1306_drawLine(0, 13, 128, 13);
+    // ssd1306_drawLine(0, 13, 128, 13);
+    // Display Header 
+    showHeader(0, 0, "RF SCANNER", 1);
 
-    ssd1306_drawLine(0, 8, 0, 15);
-    ssd1306_drawLine(63, 8, 63, 15);
-    ssd1306_drawLine(127, 8, 127, 15);
+    // ssd1306_drawLine(0, 8, 0, 15);
+    // ssd1306_drawLine(63, 8, 63, 15);
+    // ssd1306_drawLine(127, 8, 127, 15);
 
-    ssd1306_drawLine(95, 10, 95, 15);
-    ssd1306_drawLine(32, 10, 32, 15);
+    // ssd1306_drawLine(95, 10, 95, 15);
+    // ssd1306_drawLine(32, 10, 32, 15);
     ssd1306_printFixed(0,  60, "0        64       128", STYLE_NORMAL);
 }
 
@@ -329,12 +335,12 @@ void readEEPROM() {
         // Reading the data
         throttle_lower_limit = EEPROMRead16Bits(0x0000);
         throttle_upper_limit = EEPROMRead16Bits(0x0002);
-        rudder_lower_limit = EEPROMRead16Bits(0x0004);
-        rudder_upper_limit = EEPROMRead16Bits(0x0006);
-        elevator_lower_limit = EEPROMRead16Bits(0x0008);
-        elevator_upper_limit = EEPROMRead16Bits(0x000A);
-        aileron_lower_limit = EEPROMRead16Bits(0x000C);
-        aileron_upper_limit = EEPROMRead16Bits(0x000E);
+        yaw_lower_limit = EEPROMRead16Bits(0x0004);
+        yaw_upper_limit = EEPROMRead16Bits(0x0006);
+        pitch_lower_limit = EEPROMRead16Bits(0x0008);
+        pitch_upper_limit = EEPROMRead16Bits(0x000A);
+        roll_lower_limit = EEPROMRead16Bits(0x000C);
+        roll_upper_limit = EEPROMRead16Bits(0x000E);
     }
 }
 
@@ -345,12 +351,12 @@ void saveSettings() {
     // Pushing the elimits to EEPROM
     EEPROMWrite16Bits(0x0000, throttle_lower_limit);
     EEPROMWrite16Bits(0x0002, throttle_upper_limit);
-    EEPROMWrite16Bits(0x0004, rudder_lower_limit);
-    EEPROMWrite16Bits(0x0006, rudder_upper_limit);
-    EEPROMWrite16Bits(0x0008, elevator_lower_limit);
-    EEPROMWrite16Bits(0x000A, elevator_upper_limit);
-    EEPROMWrite16Bits(0x000C, aileron_lower_limit);
-    EEPROMWrite16Bits(0x000E, aileron_upper_limit);
+    EEPROMWrite16Bits(0x0004, yaw_lower_limit);
+    EEPROMWrite16Bits(0x0006, yaw_upper_limit);
+    EEPROMWrite16Bits(0x0008, pitch_lower_limit);
+    EEPROMWrite16Bits(0x000A, pitch_upper_limit);
+    EEPROMWrite16Bits(0x000C, roll_lower_limit);
+    EEPROMWrite16Bits(0x000E, roll_upper_limit);
 
     // Getting the checksum and push the the last bit of the EEPROM
     EEPROM.write(0x03FF, checksum());
@@ -379,6 +385,9 @@ void setup() {
 
     // Reset
     resetData();
+
+    // Setup Timers
+    setupTimers();
     
     // Setup Radio Unit
     setup_radio();
@@ -396,6 +405,51 @@ void setup() {
     loopCount = 0;
 
     showHeaderMain();
+}
+
+/*
+ * Configuring basic 1 second interrupt for timers and other related used
+ */
+#define PRELOAD_TIMER 0x85EE    // 34286 - 2Hz
+
+void setupTimers() {
+    // Initialize timer1
+    // Disables all the interrupts
+    cli();
+    TCCR1A = 0;                 // set entire TCCR1A register to 0
+    TCCR1B = 0;                 // set entire TCCR1A register to 0
+    
+    // use 64886 preload timer for -> 65536-16MHz/256/100Hz
+    // use 64286 preload timer for -> 65536-16MHz/256/50Hz
+    // use 34286 preload timer for -> 65536-16MHz/256/2Hz
+    TCNT1 = PRELOAD_TIMER;             // Preload Timer
+
+    // Set CS10 but so timer runs at clock speed. (No prescaling)
+    TCCR1B |= (1 << CS12);      // 256 prescaler 
+    TIMSK1 |= (1 << TOIE1);     // enable timer overflow interrupt
+
+    sei();                      // enable all interrupts
+}
+
+// Timer interrupt
+ISR(TIMER1_OVF_vect) {
+    // Do all the calculations and timing related process
+    if(interrupt_ticks < 2) {
+        // Increase ....
+        interrupt_ticks++;
+    } else {
+        // Time for calculation
+        txTotalPackets = txPackets;
+
+        // Reset it.
+        txPackets = 0;
+
+        // Reset to 0 for next cycle
+        interrupt_ticks = 0;
+    } 
+    
+    // Reload Timer
+    TCNT1 = PRELOAD_TIMER;
 }
 
 void setup_radio() {
@@ -514,7 +568,7 @@ void readSwitches() {
                 else if(kpd.key[i].kchar == '1') lgimbal_left = 0;
                 else if(kpd.key[i].kchar == '2') lgimbal_down = 0;
                 else if(kpd.key[i].kchar == '3') lgimbal_right = 0;
-                else if(kpd.key[i].kchar == '0') lgimbal_up = 0;
+                else if(kpd.key[i].kchar == '5') lgimbal_up = 0;
             }
         }
     }
@@ -526,21 +580,31 @@ void readSwitches() {
 void readAnalogs() {
     // Gimbal readings
     throttleValue = analogReadFast(THROTTLE_PORT);
-    rudderValue = analogReadFast(RUDDER_PORT);
-    aileronValue = analogReadFast(AILERON_PORT);
-    elevatorValue = analogReadFast(ELEVATOR_PORT);
+    yawValue = analogReadFast(YAW_PORT);
+    rollValue = analogReadFast(ROLL_PORT);
+    pitchValue = analogReadFast(PITCH_PORT);
 
     // Mapping the values to 1000 - 2000 as standard of the RC values
-    throttleValue = map(throttleValue, throttle_lower_limit, throttle_upper_limit, 1000, 2000);
-    rudderValue = map(rudderValue, rudder_lower_limit, rudder_upper_limit, 1000, 2000);
-    aileronValue = map(aileronValue, aileron_lower_limit, aileron_upper_limit, 1000, 2000);
-    elevatorValue = map(elevatorValue, elevator_lower_limit, elevator_upper_limit, 1000, 2000);
+    // Mapping the values to 0 - 255 from 0 - 1024. It seems transmitting 16 bits a bit lag on
+    // responds. Moving back to 8 bits and see what is the result on 
+    // Multiwii GUI.
+    throttleValue = map(throttleValue, throttle_lower_limit, throttle_upper_limit, 0, 255);
+    yawValue = map(yawValue, yaw_lower_limit, yaw_upper_limit, 0, 255);
+    rollValue = map(rollValue, roll_lower_limit, roll_upper_limit, 0, 255);
+    pitchValue = map(pitchValue, pitch_lower_limit, pitch_upper_limit, 0, 255);
+
+    // TODO:
+    // Channel Mapping
+    // Reverse
+    yawValue = 255 - yawValue;
+    pitchValue = 255 - pitchValue;
 
     // Battery Input
     batteryVoltageValue = analogReadFast(BAT_IN);
 
     // Variable Resistor
     channelCValue = analogReadFast(AUX1_PORT);
+    channelCValue = map(channelCValue, 0, 1024, 0, 255);
 }
 
 /*
@@ -564,23 +628,24 @@ void txMode() {
     txData();
 }
 
+/*
+ * Displaying the values of the analog readings and the transmission packets/seconds
+ */
 void showGimbals() {
-    /*
-     *  [|----------][-----|-----]
-     *  [-----|-----][-----|-----]
-     */
-    uint16_t throttleBarValue = (throttleValue - 1000) * 0.016;
-    drawBars(0, 17, 17, throttleBarValue);
-    uint16_t rudderBarValue = (rudderValue - 1000)* 0.016;
-    drawBars(0, 25, 17, rudderBarValue);
-    uint16_t elevatorBarValue = (elevatorValue - 1000) * 0.016;
-    drawBars(0, 33, 17, elevatorBarValue);
-    uint16_t aileronBarValue = (aileronValue - 1000)* 0.016;
-    drawBars(0, 41, 17, aileronBarValue);
+    // Analog values
+    sprintf(buf, "T:%04i P:%04i", throttleValue, pitchValue);
+    ssd1306_printFixed(0, 16, buf, STYLE_NORMAL);
+
+    sprintf(buf, "Y:%04i R:%04i", yawValue, rollValue);
+    ssd1306_printFixed(0, 24, buf, STYLE_NORMAL);
+
+    // Transmission packets.
+    sprintf(buf, "TX:%03i/s", txTotalPackets);
+    ssd1306_printFixed(0, 32, buf, STYLE_NORMAL);
 }
 
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position) {
-    sprintf(buf, "T", throttleValue, rudderValue);
+    sprintf(buf, "T", throttleValue, yawValue);
 
     ssd1306_printFixed(x, y, "[", STYLE_NORMAL);
     x+=6;
@@ -599,17 +664,20 @@ void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position) {
  *  Sending Data to Remote. This will be changed once confirm the basic version is running
  */
 void txData() {
-    data.ch1 = throttleValue;
-    data.ch2 = rudderValue;
-    data.ch3 = aileronValue;
-    data.ch4 = elevatorValue;
-    data.ch5 = 50;
+    data.ch1 = rollValue;
+    data.ch2 = pitchValue;
+    data.ch3 = throttleValue;
+    data.ch4 = yawValue;
+    data.ch5 = channelCValue;
     data.ch6 = 60;
     data.ch7 = 70;
     data.ch8 = 80;
 
     // Sending Data
     radio.write(&data, sizeof(MyData));
+
+    // Increase counter for profiling
+    txPackets++;
 }
 
 /*
@@ -743,31 +811,31 @@ void elimits() {
 
     // Gimbal readings - Not using the common functions since this not requires mapping
     throttleValue = analogReadFast(THROTTLE_PORT);
-    rudderValue = analogReadFast(RUDDER_PORT);
-    aileronValue = analogReadFast(AILERON_PORT);
-    elevatorValue = analogReadFast(ELEVATOR_PORT);
+    yawValue = analogReadFast(YAW_PORT);
+    rollValue = analogReadFast(ROLL_PORT);
+    pitchValue = analogReadFast(PITCH_PORT);
 
     ssd1306_printFixed(0, 17, "UP: Reset Right: Save", STYLE_NORMAL);
 
     // Getting the min and max values of each sticks
     if(throttle_upper_limit < throttleValue) throttle_upper_limit = throttleValue;
     if(throttle_lower_limit > throttleValue) throttle_lower_limit = throttleValue;
-    if(rudder_upper_limit < rudderValue) rudder_upper_limit = rudderValue;
-    if(rudder_lower_limit > rudderValue) rudder_lower_limit = rudderValue;
-    if(elevator_upper_limit < elevatorValue) elevator_upper_limit = elevatorValue;
-    if(elevator_lower_limit > elevatorValue) elevator_lower_limit = elevatorValue;
-    if(aileron_upper_limit < aileronValue) aileron_upper_limit = aileronValue;
-    if(aileron_lower_limit > aileronValue) aileron_lower_limit = aileronValue;
+    if(yaw_upper_limit < yawValue) yaw_upper_limit = yawValue;
+    if(yaw_lower_limit > yawValue) yaw_lower_limit = yawValue;
+    if(pitch_upper_limit < pitchValue) pitch_upper_limit = pitchValue;
+    if(pitch_lower_limit > pitchValue) pitch_lower_limit = pitchValue;
+    if(roll_upper_limit < rollValue) roll_upper_limit = rollValue;
+    if(roll_lower_limit > rollValue) roll_lower_limit = rollValue;
 
     uint8_t x = 8;
 
     sprintf(buf, "TL:%04i TU:%04i", throttle_lower_limit, throttle_upper_limit);
     ssd1306_printFixed(x, 32, buf, STYLE_NORMAL);
-    sprintf(buf, "RL:%04i RU:%04i", rudder_lower_limit, rudder_upper_limit);
+    sprintf(buf, "RL:%04i RU:%04i", yaw_lower_limit, yaw_upper_limit);
     ssd1306_printFixed(x, 40, buf, STYLE_NORMAL);
-    sprintf(buf, "EL:%04i EU:%04i", elevator_lower_limit, elevator_upper_limit);
+    sprintf(buf, "EL:%04i EU:%04i", pitch_lower_limit, pitch_upper_limit);
     ssd1306_printFixed(x, 48, buf, STYLE_NORMAL);
-    sprintf(buf, "AL:%04i AU:%04i", aileron_lower_limit, aileron_upper_limit);
+    sprintf(buf, "AL:%04i AU:%04i", roll_lower_limit, roll_upper_limit);
     ssd1306_printFixed(x, 56, buf, STYLE_NORMAL);
 
     // Save settings
@@ -784,12 +852,12 @@ void elimits() {
     if(rgimbal_up == 1) {
          throttle_upper_limit = 600;
          throttle_lower_limit = 300;
-         rudder_upper_limit = 600;
-         rudder_lower_limit = 300;
-         elevator_upper_limit = 600;
-         elevator_lower_limit = 300;
-         aileron_upper_limit = 600;
-         aileron_lower_limit = 300;
+         yaw_upper_limit = 600;
+         yaw_lower_limit = 300;
+         pitch_upper_limit = 600;
+         pitch_lower_limit = 300;
+         roll_upper_limit = 600;
+         roll_lower_limit = 300;
     }   
     
 }
@@ -801,10 +869,10 @@ void debugKeys() {
     readSwitches();
     readAnalogs();
 
-    sprintf(buf, "T:%04i R:%04i", throttleValue, rudderValue);
+    sprintf(buf, "T:%04i P:%04i", throttleValue, pitchValue);
     ssd1306_printFixed(0, 16, buf, STYLE_NORMAL);
 
-    sprintf(buf, "A:%04i E:%04i", aileronValue, elevatorValue);
+    sprintf(buf, "Y:%04i R:%04i", yawValue, rollValue);
     ssd1306_printFixed(0, 24, buf, STYLE_NORMAL);
   
     // Battery Calculation

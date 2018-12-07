@@ -19,6 +19,7 @@ void saveSettings();
 void scanChannels();
 void setup_inputs();
 void setup_radio();
+void setupTimers();
 void setupMode();
 void showRFScanMode();
 void showLogo();
@@ -47,7 +48,7 @@ void showHeaderSetup();
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
 
 /* Reading analogue values. */
-uint16_t throttleValue, rudderValue, elevatorValue, aileronValue;
+uint16_t throttleValue, yawValue, pitchValue, rollValue;
 uint16_t batteryVoltageValue, channelCValue;
 
 /* Controller variables */
@@ -58,12 +59,12 @@ uint8_t rgimbal_up, rgimbal_down, rgimbal_left, rgimbal_right;
 /* Gimbal's upper limit and lower limit */
 uint16_t throttle_upper_limit = 600;
 uint16_t throttle_lower_limit = 300;
-uint16_t rudder_upper_limit = 600;
-uint16_t rudder_lower_limit = 300;
-uint16_t elevator_upper_limit = 600;
-uint16_t elevator_lower_limit = 300;
-uint16_t aileron_upper_limit = 600;
-uint16_t aileron_lower_limit = 300;
+uint16_t yaw_upper_limit = 600;
+uint16_t yaw_lower_limit = 300;
+uint16_t pitch_upper_limit = 600;
+uint16_t pitch_lower_limit = 300;
+uint16_t roll_upper_limit = 600;
+uint16_t roll_lower_limit = 300;
 
 /* For counter checking eeprom checksum */
 uint8_t eeprom_checksum;
