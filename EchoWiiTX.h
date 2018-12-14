@@ -14,6 +14,7 @@ void debugKeys();
 void detectExit();
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position);
 void elimits();
+void reverse();
 void rfscanMode();
 void saveSettings();
 void scanChannels();
@@ -21,9 +22,15 @@ void setup_inputs();
 void setup_radio();
 void setupTimers();
 void setupMode();
-void showRFScanMode();
-void showLogo();
 void showGimbals();
+void showHeaderELimits();
+void showHeaderMain();
+void showHeaderDebug();
+void showHeaderReverse();
+void showHeaderSetup();
+void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
+void showLogo();
+void showRFScanMode();
 void txData();
 void txMode();
 
@@ -39,13 +46,7 @@ uint16_t EEPROMRead16Bits(uint16_t addr);
 uint8_t checksum();
 
 /* Skip some processes */
-uint8_t shortDelay();
-
-void showHeaderELimits();
-void showHeaderMain();
-void showHeaderDebug();
-void showHeaderSetup();
-void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
+uint8_t shortDelay(uint16_t max_count);
 
 /* Reading analogue values. */
 uint16_t throttleValue, yawValue, pitchValue, rollValue;
@@ -78,6 +79,7 @@ uint16_t roll_lower_limit = 300;
    R: Roll
    C: Channel C
 */
+uint8_t reverseBits = 0;
 uint8_t reverse_throttle = 0;
 uint8_t reverse_yaw = 0;
 uint8_t reverse_pitch = 0;
