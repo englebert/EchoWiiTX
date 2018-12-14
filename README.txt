@@ -47,7 +47,7 @@ On Going Development:
 3. Channel Mapping
 4. Switch Mapping
 5. Telemetry
-6. Reverse reading
+6. Reverse Stick Values - DONE
 7. Timer
 Updates:
 1. Enhanced TX Speed from 127 Packets/s to 755 Packets/s. This is due to the OLED refreshing rate reduced to 2FPS. Saving some resources and give more resources to the data transmission. Also removed the CH8 from the data structure.
