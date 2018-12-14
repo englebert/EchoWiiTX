@@ -68,7 +68,6 @@ struct MyData {
     uint8_t ch5;
     uint8_t ch6;
     uint8_t ch7;
-    uint8_t ch8;
 };
 MyData data;
 
@@ -92,6 +91,9 @@ uint8_t trimUpdates = 1;
 uint16_t txTotalPackets = 0;
 uint16_t txPackets = 0;
 uint8_t interrupt_ticks = 0;
+
+// Prevent slows down during refresh
+uint8_t oled_refresh = 0;
 
 /**
  * Configurations and Values
@@ -286,7 +288,6 @@ void resetData() {
     data.ch5 = 0;
     data.ch6 = 0;
     data.ch7 = 0;
-    data.ch8 = 0;
 }
 
 /*
@@ -437,6 +438,9 @@ ISR(TIMER1_OVF_vect) {
     if(interrupt_ticks < 2) {
         // Increase ....
         interrupt_ticks++;
+
+        // Allow display to refresh. Too frequent refresh causing slowness
+        oled_refresh = 1;
     } else {
         // Time for calculation
         txTotalPackets = txPackets;
@@ -633,6 +637,8 @@ void txMode() {
  */
 void showGimbals() {
     // Analog values
+    if(oled_refresh != 1) return;
+
     sprintf(buf, "T:%04i P:%04i", throttleValue, pitchValue);
     ssd1306_printFixed(0, 16, buf, STYLE_NORMAL);
 
@@ -642,6 +648,9 @@ void showGimbals() {
     // Transmission packets.
     sprintf(buf, "TX:%03i/s", txTotalPackets);
     ssd1306_printFixed(0, 32, buf, STYLE_NORMAL);
+
+    // Reset it after done.
+    oled_refresh = 0;
 }
 
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position) {
@@ -671,7 +680,6 @@ void txData() {
     data.ch5 = channelCValue;
     data.ch6 = 60;
     data.ch7 = 70;
-    data.ch8 = 80;
 
     // Sending Data
     radio.write(&data, sizeof(MyData));
