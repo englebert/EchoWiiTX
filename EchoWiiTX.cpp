@@ -84,13 +84,15 @@ struct MyData {
 };
 MyData data;
 
-/* Menu definitions */
+/* Menu definitions -- START */
 #define TXMODE                   0
 #define MENU_SETUP               99
 #define MENU_SETUP_ELIMIT        2
+#define MENU_SETUP_REVERSE       4
 #define MENU_SETUP_RF_SCANNER    7
 #define MENU_SETUP_KEYS_DEBUGGER 8
 #define MENU_SETUP_EXIT          10
+/* Menu definitions -- END   */
 
 // Default mode = 0
 // MODE:
@@ -131,6 +133,52 @@ uint8_t oled_refresh = 0;
 
 char buf[32];
 char line_buffer[32];
+
+/*
+ * Just to skip some processes
+ */
+uint8_t shortDelay(uint16_t max_count) {
+    if(loopCount != 0) {
+        loopCount++;
+        if(loopCount >= max_count) {
+            loopCount = 0;
+            return 1;
+        }
+    } else {
+        loopCount++;
+    }
+    return 0;
+}
+
+/*
+ * Setup Menu
+ */
+uint8_t current_setup_page = 0;
+uint8_t current_setup_selected = 0;
+uint8_t setup_menu_refreshed = 0;
+
+const char *menuItemsSetup[] = {
+    "Model Setup",
+    "Timers",
+    "E.Limits",
+    "E.Trim",
+    "Reverse",
+    "Mapping",
+    "Expo",
+    "RF Scanner",
+    "Keys Debugger",
+    "About",
+    "Exit"
+};
+
+uint8_t max_items_setup = (sizeof(menuItemsSetup) / sizeof(char *)) - 1;
+uint8_t max_page_setup = max_items_setup - 5;
+
+/*
+ * Reverse Menu
+ */
+uint8_t current_reverse_selected = 0;
+uint8_t reverse_menu_refreshed = 0;
 
 /*
  * 2.4G Scanning Program [START]
@@ -365,7 +413,7 @@ void readEEPROM() {
            Y: Yaw
            R: Roll
            C: Channel C  */
-        uint8_t reverseBits = EEPROM.read(EEPROM_REVERSE_ADDR);
+        reverseBits = EEPROM.read(EEPROM_REVERSE_ADDR);
 
         // Assigning values
         reverse_throttle = reverseBits & B00000001;
@@ -391,8 +439,7 @@ void saveSettings(uint8_t settings_type) {
         EEPROMWrite16Bits(EEPROM_ROLL_LIMIT_ADDR, roll_lower_limit);
         EEPROMWrite16Bits(EEPROM_ROLL_LIMIT_ADDR + 2, roll_upper_limit);
     } else if(settings_type == REVERSE) {
-        uint8_t reverseBits = 
-                    reverse_throttle +
+        reverseBits = reverse_throttle +
                     (reverse_pitch << 1) +
                     (reverse_yaw << 2) +
                     (reverse_roll << 3) +
@@ -538,6 +585,8 @@ void loop() {
         debugKeys();
     } else if(txmode == MENU_SETUP_ELIMIT) {
         elimits();
+    } else if(txmode == MENU_SETUP_REVERSE) {
+        reverse();
     }
 }
 
@@ -639,6 +688,10 @@ void readAnalogs() {
     rollValue = map(rollValue, roll_lower_limit, roll_upper_limit, 0, 255);
     pitchValue = map(pitchValue, pitch_lower_limit, pitch_upper_limit, 0, 255);
 
+    // Variable Resistor
+    channelCValue = analogReadFast(AUX1_PORT);
+    channelCValue = map(channelCValue, 0, 1024, 0, 255);
+
     // TODO:
     // Channel Mapping
 
@@ -651,10 +704,6 @@ void readAnalogs() {
 
     // Battery Input
     batteryVoltageValue = analogReadFast(BAT_IN);
-
-    // Variable Resistor
-    channelCValue = analogReadFast(AUX1_PORT);
-    channelCValue = map(channelCValue, 0, 1024, 0, 255);
 }
 
 /*
@@ -734,52 +783,11 @@ void txData() {
     txPackets++;
 }
 
-/*
- * Just to skip some processes
- */
-uint8_t shortDelay() {
-    if(loopCount != 0) {
-        loopCount++;
-        if(loopCount >= 15000) {
-            loopCount = 0;
-            return 1;
-        }
-    } else {
-        loopCount++;
-    }
-    return 0;
-}
-
-/*
- * Setup Menu
- */
-uint8_t current_setup_page = 0;
-uint8_t current_setup_selected = 0;
-uint8_t setup_menu_refreshed = 0;
-
-const char *menuItemsSetup[] = {
-    "Model Setup",
-    "Timers",
-    "E.Limits",
-    "E.Trim",
-    "Reverse",
-    "Mapping",
-    "Expo",
-    "RF Scanner",
-    "Keys Debugger",
-    "About",
-    "Exit"
-};
-
-
-uint8_t max_items_setup = (sizeof(menuItemsSetup) / sizeof(char *)) - 1;
-uint8_t max_page_setup = max_items_setup - 5;
-
 void setupMode() {
     readSwitches();
 
     // Skip for a while
-    if(shortDelay() == 0) return;
+    if(shortDelay(15000) == 0) return;
 
     // Refreshing screen
     if(rgimbal_up == 1 || rgimbal_down == 1) {
@@ -813,6 +821,8 @@ void setupMode() {
         // Prevent double enter
         rgimbal_right = 0;
 
+        // Set the value and return to main loop.
+        // The main loop will determine the process to work on.
         setup_menu_refreshed = 0;
         if(current_setup_selected == MENU_SETUP_EXIT) {
             // current_setup_selected = 0;
@@ -830,6 +840,12 @@ void setupMode() {
             return;
         } else if(current_setup_selected == MENU_SETUP_RF_SCANNER) {
             txmode = MENU_SETUP_RF_SCANNER;
+            return;
+        } else if(current_setup_selected == MENU_SETUP_REVERSE) {
+            txmode = MENU_SETUP_REVERSE;
+            reverse_menu_refreshed = 1;
+            current_reverse_selected = 0;
+            showHeaderReverse();
             return;
         }
     }
@@ -855,6 +871,114 @@ void setupMode() {
 
     setup_menu_refreshed = 1;
 }
+
+/*
+ * Setting stick to reverse values
+ */
+void reverse() { 
+    // Reading Inputs
+    readSwitches();
+
+    // Skip for a while
+    if(shortDelay(15000) == 0) return;
+
+    // Display all the reversable sticks values and then let the user to select 
+    // and pick. May involve Up, Down, Left and Right for selection.    
+    const char *menuItemsReverse[] = {
+        "Throttle",
+        "Pitch",
+        "Yaw",
+        "Roll",
+        "Channel C",
+        "Exit"
+    };
+
+    uint8_t max_items_reverse = (sizeof(menuItemsReverse) / sizeof(char *)) - 1;
+    
+
+    // If Down switch pressed, select another menu
+    if(rgimbal_down == 1) {
+        if(current_reverse_selected < max_items_reverse)
+            current_reverse_selected++;
+        reverse_menu_refreshed = 1;
+    } else if(rgimbal_up == 1) {
+        if(current_reverse_selected > 0)
+            current_reverse_selected--;
+        reverse_menu_refreshed = 1;
+    } else if(rgimbal_right == 1 || rgimbal_left == 1) {
+        // If is the last item then exit back to the menu
+        if(current_reverse_selected == max_items_reverse) {
+            txmode = MENU_SETUP;
+            showHeaderSetup();
+            return;
+        }
+
+        // Defined toggle value based on the switch selection.
+        // Optimizing the coding.
+        uint8_t toggle_value;
+        if(rgimbal_right == 1) {
+            toggle_value = 1;
+        } else {
+            toggle_value = 0;
+        }
+
+        // Select and unselect the option and save to the EEPROM direct
+        if(current_reverse_selected == 0) {
+            reverse_throttle = toggle_value;
+        } else if(current_reverse_selected == 1) {
+            reverse_pitch = toggle_value;
+        } else if(current_reverse_selected == 2) {
+            reverse_yaw = toggle_value;
+        } else if(current_reverse_selected == 3) {
+            reverse_roll = toggle_value;
+        } else if(current_reverse_selected == 4) {
+            reverse_channelc = toggle_value;
+        }
+
+        // Save EEPROM settings - REVERSE configuration only
+        saveSettings(REVERSE);
+
+        // Refresh menu
+        reverse_menu_refreshed = 1;
+    }
+
+    // Skip from here if no need to refresh screen.
+    if(reverse_menu_refreshed == 0) return;
+
+    // Processing the menu also at the same time put a symbol if is toggled
+    uint8_t j = 0;
+    uint8_t y = 0;
+
+    for(uint8_t i = 0; i <= max_items_reverse; i++) {
+        // Y position of the menu
+        y = 17 + (j * 8);
+
+        // Clear previous line
+        ssd1306_printFixed(0, y, "               ", STYLE_NORMAL);
+
+        // Print Menu
+        ssd1306_printFixed(8, y, menuItemsReverse[i], STYLE_NORMAL);
+
+        // Print Current Toggle Value
+        if(i != max_items_reverse) {
+            if((reverseBits >> i) & B00000001 == 1) {
+                ssd1306_printFixed(100, y, "[X]", STYLE_NORMAL);
+            } else {
+                ssd1306_printFixed(100, y, "[.]", STYLE_NORMAL);
+            }
+        }
+        
+        // Print cursor
+        if(i == current_reverse_selected) {
+            ssd1306_printFixed(0, y, ">", STYLE_NORMAL);
+        }
+        j++;
+    }
+
+    // Prevent menu refreshed
+    reverse_menu_refreshed = 0;
+}
+
 
 /*
  * Setting E-Limits on both of the gimbals
@@ -913,7 +1037,6 @@ void elimits() {
          roll_upper_limit = 600;
          roll_lower_limit = 300;
     }   
-    
 }
 
 /*
@@ -951,6 +1074,9 @@ void debugKeys() {
     detectExit();
 }
 
+/*
+ * Shortcut to EXIT from the application
+ */
 void detectExit() {
     if(rgimbal_right == 1 && lgimbal_left == 1) {
         txmode = MENU_SETUP;
@@ -976,6 +1102,10 @@ void showHeaderMain() {
 
 void showHeaderDebug() {
     showHeader(0, 0, "[ DEBUG MODE ]", 0);
+}
+
+void showHeaderReverse() {
+    showHeader(0, 0, "REVERSE", 1);
 }
 
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style) {
