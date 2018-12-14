@@ -19,17 +19,21 @@
 #include <EEPROM.h>
 
 /* EEPROM RELATED */
-#define EEPROM_MAXADDR 17
-#define EEPROM_THROTTLE_LIMIT_ADDR 0x0000
-#define EEPROM_YAW_LIMIT_ADDR 0x0004
-#define EEPROM_PITCH_LIMIT_ADDR 0x0008
-#define EEPROM_ROLL_LIMIT_ADDR 0x000C
-#define EEPROM_REVERSE_ADDR 0x0010
-#define EEPROM_CHECKSUM_ADDR 0x03FF
+#define EEPROM_MAXADDR              20
+#define EEPROM_THROTTLE_LIMIT_ADDR  0x0000
+#define EEPROM_YAW_LIMIT_ADDR       0x0004
+#define EEPROM_PITCH_LIMIT_ADDR     0x0008
+#define EEPROM_ROLL_LIMIT_ADDR      0x000C
+#define EEPROM_REVERSE_ADDR         0x0010
+#define EEPROM_AUX2SWITCH_ADDR      0x0011
+#define EEPROM_AUX3SWITCH_ADDR      0x0012
+#define EEPROM_AUX4SWITCH_ADDR      0x0013
+#define EEPROM_CHECKSUM_ADDR        0x03FF
 
 /* Save Settings Definition */
-#define ELIMIT 1
-#define REVERSE 2
+#define ELIMIT      1
+#define REVERSE     2
+#define AUXSWITCHES 3 
 
 /*
  * Keypad configuration
@@ -70,6 +74,11 @@ RF24 radio(9, 10);                        // D9 -> Enable, D10 -> CSN pin
 #define CE           9
 #define MAX_CHANNELS 125
 
+// For the Switch A ~ Switch I
+#define SWITCH_MIN_VALUE    0x40
+#define SWITCH_MAX_VALUE    0x49
+#define DASH                0x2D
+
 // Use for storing the data of the channel load
 int channel_loads;
 
@@ -87,8 +96,10 @@ MyData data;
 /* Menu definitions -- START */
 #define TXMODE                   0
 #define MENU_SETUP               99
+#define MENU_SETUP_TIMER         1
 #define MENU_SETUP_ELIMIT        2
 #define MENU_SETUP_REVERSE       4
+#define MENU_SETUP_MAPPING       5
 #define MENU_SETUP_RF_SCANNER    7
 #define MENU_SETUP_KEYS_DEBUGGER 8
 #define MENU_SETUP_EXIT          10
@@ -127,6 +138,8 @@ uint8_t oled_refresh = 0;
 // Voltage Scaling Value
 #define VOLTAGE_SCALE 0.04878
 
+// PRESCALE TIMER SETTINGS
+#define PRELOAD_TIMER 0x85EE    // 34286 - 2Hz
 
 // For Debugging Purposes
 // #define DEBUG 1
@@ -179,6 +192,12 @@ uint8_t max_page_setup = max_items_setup - 5;
  */
 uint8_t current_reverse_selected = 0;
 uint8_t reverse_menu_refreshed = 0;
+
+/*
+ * Mapping Menu
+ */
+uint8_t current_mapping_selected = 0;
+uint8_t mapping_menu_refreshed = 0;
 
 /*
  * 2.4G Scanning Program [START]
@@ -421,6 +440,33 @@ void readEEPROM() {
         reverse_yaw = (reverseBits & B00000100) >> 2;
         reverse_roll = (reverseBits & B00001000) >> 3;
         reverse_channelc = (reverseBits & B00010000) >> 4;
+
+        for(uint8_t i = 0; i < 3; i++) {
+            // Aux2, Aux3 and Aux4 Port values
+            portAUX[i] = EEPROM.read(EEPROM_AUX2SWITCH_ADDR + i);
+
+            // Default minimum values
+            if(portAUX[i] < SWITCH_MIN_VALUE)
+                portAUX[i] = SWITCH_MIN_VALUE;
+        }
+    } else {
+        // Defaults 
+        throttle_lower_limit = 400;
+        throttle_upper_limit = 400;
+        yaw_lower_limit = 400;
+        yaw_upper_limit = 400;
+        pitch_lower_limit = 400;
+        pitch_upper_limit = 400;
+        roll_lower_limit = 400;
+        roll_upper_limit = 400;
+        reverse_throttle = 0;
+        reverse_pitch = 0;
+        reverse_yaw = 0;
+        reverse_roll = 0;
+        reverse_channelc = 0;
+        portAUX[0] = SWITCH_MIN_VALUE;
+        portAUX[1] = SWITCH_MIN_VALUE;
+        portAUX[2] = SWITCH_MIN_VALUE;
     }
 }
 
@@ -438,6 +484,8 @@ void saveSettings(uint8_t settings_type) {
         EEPROMWrite16Bits(EEPROM_PITCH_LIMIT_ADDR + 2, pitch_upper_limit);
         EEPROMWrite16Bits(EEPROM_ROLL_LIMIT_ADDR, roll_lower_limit);
         EEPROMWrite16Bits(EEPROM_ROLL_LIMIT_ADDR + 2, roll_upper_limit);
+
+    // Pushing the reverse settings to EEPROM
     } else if(settings_type == REVERSE) {
         reverseBits = reverse_throttle +
                     (reverse_pitch << 1) +
@@ -446,6 +494,12 @@ void saveSettings(uint8_t settings_type) {
                     (reverse_channelc << 4);
 
         EEPROM.write(EEPROM_REVERSE_ADDR, reverseBits);
+
+    // Settings AUX switches to EEPROM
+    } else if(settings_type == AUXSWITCHES) {
+        for(uint8_t i = 0; i < 3; i++) {
+            EEPROM.write(EEPROM_AUX2SWITCH_ADDR + i, portAUX[i]);
+        }
     }
 
     // Getting the checksum and push the the last bit of the EEPROM
@@ -470,11 +524,11 @@ void setup() {
     #endif
     // Debugging End
 
-    // Reading from EEPROM
-    readEEPROM();
-
     // Reset
     resetData();
+
+    // Reading from EEPROM
+    readEEPROM();
 
     // Setup Timers
     setupTimers();
@@ -500,10 +554,8 @@ void setup() {
 /*
  * Configuring basic 1 second interrupt for timers and other related used
  */
-#define PRELOAD_TIMER 0x85EE    // 34286 - 2Hz
-
 void setupTimers() {
-    // Initialize timer1
+    // Initialize internal timer1
     // Disables all the interrupts
     cli();
     TCCR1A = 0;                 // set entire TCCR1A register to 0
@@ -587,7 +639,146 @@ void loop() {
         elimits();
     } else if(txmode == MENU_SETUP_REVERSE) {
         reverse();
+    } else if(txmode == MENU_SETUP_TIMER) {
+        runTimers();
+    } else if(txmode == MENU_SETUP_MAPPING) {
+        mapping();
     }
+}
+
+/*
+ * Mapping keys
+ */
+void mapping() {
+    readSwitches();
+
+    // Skip for a while
+    if(shortDelay(15000) == 0) return;
+
+    // Display all the reversable sticks values and then let the user to select 
+    // and pick. May involve Up, Down, Left and Right for selection.    
+    const char *menuItemsMapping[] = {
+        "AUX2",
+        "AUX3",
+        "AUX4",
+        "Exit"
+    };
+
+    uint8_t max_items_mapping = (sizeof(menuItemsMapping) / sizeof(char *)) - 1;
+
+    // If Down switch pressed, select another menu
+    if(rgimbal_down == 1) {
+        if(current_mapping_selected < max_items_mapping)
+            current_mapping_selected++;
+        mapping_menu_refreshed = 1;
+    } else if(rgimbal_up == 1) {
+        if(current_mapping_selected > 0)
+            current_mapping_selected--;
+        mapping_menu_refreshed = 1;
+    } else if(rgimbal_right == 1 || rgimbal_left == 1) {
+        // If is the last item then exit back to the menu
+        if(current_mapping_selected == max_items_mapping) {
+            txmode = MENU_SETUP;
+            showHeaderSetup();
+            return;
+        }
+
+        // AUXILIARY CHANNEL 2 till CHANNEL 4
+        if(rgimbal_right == 1) {
+            if(portAUX[current_mapping_selected] < SWITCH_MAX_VALUE)
+                portAUX[current_mapping_selected]++;
+
+            // Skip C which is not using
+            if(portAUX[current_mapping_selected] == 67)
+                portAUX[current_mapping_selected]++;
+
+
+        } else if(rgimbal_left == 1) {
+            if(portAUX[current_mapping_selected] > SWITCH_MIN_VALUE)
+                portAUX[current_mapping_selected]--;
+
+            // Skip C which is not using
+            if(portAUX[current_mapping_selected] == 67)
+                portAUX[current_mapping_selected]--;
+        }
+        
+        // Refresh menu
+        mapping_menu_refreshed = 1;
+
+        // Save EEPROM settings - AUXSWITCHES configuration only
+        saveSettings(AUXSWITCHES);
+
+    }
+
+    // Skip from here if no need to refresh screen.
+    if(mapping_menu_refreshed == 0) return;
+
+    // Processing the menu also at the same time put a symbol if is toggled
+    uint8_t j = 0;
+    uint8_t y = 0;
+    uint8_t c = 0;
+
+    for(uint8_t i = 0; i <= max_items_mapping; i++) {
+        // Y position of the menu
+        y = 17 + (j * 8);
+
+        // Clear previous line
+        ssd1306_printFixed(0, y, "               ", STYLE_NORMAL);
+
+        // Print Menu
+        ssd1306_printFixed(8, y, menuItemsMapping[i], STYLE_NORMAL);
+
+        // Print Current Toggle Value
+        if(i != max_items_mapping) {
+            if(portAUX[i] == SWITCH_MIN_VALUE) {
+                // ASCII CODE: -
+                c = 45;
+            } else {
+                c = portAUX[i];
+            }
+
+            sprintf(buf, "[%c]", c);
+            ssd1306_printFixed(64, y, buf, STYLE_NORMAL);
+        }
+        
+        // Print cursor
+        if(i == current_mapping_selected) {
+            ssd1306_printFixed(0, y, ">", STYLE_NORMAL);
+        }
+        j++;
+    }
+
+    // Prevent menu refreshed
+    mapping_menu_refreshed = 0;
+}
+
+/*
+ * Configuring Timers
+ */
+void runTimers() {
+// TODO: Later continue
+    readSwitches();
+    
+    if(isPressed('A') == true) {   
+        ssd1306_printFixed(0, 16, "A PRESSED ", STYLE_NORMAL);
+    } else {
+        ssd1306_printFixed(0, 16, "A RELEASED", STYLE_NORMAL);
+    }
+
+    detectExit();
+}
+
+/*
+ * Detect Key Press
+ */
+uint8_t isPressed(char keyChar) {
+    for(uint8_t i=0; i<LIST_MAX; i++) {
+        if(kpd.key[i].kchar == keyChar) {
+            if((kpd.key[i].kstate == PRESSED || kpd.key[i].kstate == HOLD))
+                return true;
+        }
+    }
+    return false;	// Not pressed.
 }
 
 /*
@@ -670,6 +861,21 @@ void readSwitches() {
 }
 
 /*
+ * Reading Mapping Auxiliary switch positions
+ */
+void readAux() {
+    // Reset value first
+    ch6Value = 0;
+
+    // Loop through the values and assign
+    for(uint8_t i = 0; i < 3; i++) {
+        if(isPressed(portAUX[i]) == true) {
+            ch6Value = ch6Value | (1 << (7 - i));
+        }
+    }
+}
+
+/*
  * Reading all the analog input data
  */
 void readAnalogs() {
@@ -692,8 +898,13 @@ void readAnalogs() {
     channelCValue = analogReadFast(AUX1_PORT);
     channelCValue = map(channelCValue, 0, 1024, 0, 255);
 
+    // Auxilary 2, 3 ad 4
+    // These 3 channels a bit tricky. Need to add into the bits before tx.
     // TODO:
-    // Channel Mapping
+    // Channel Mapping: Using the char value to determine the channels mapping.
+    // e.g.:
+    // Channel B: B = ascii code 98. So, 98 will stored to aux1 value in the eeprom for the switch status
+    // mapping and etc.
 
     // Reverse Channels if flag is set
     if(reverse_throttle == 1) throttleValue = 255 - throttleValue;
@@ -712,6 +923,7 @@ void readAnalogs() {
 void txMode() {
     readSwitches();
     readAnalogs();
+    readAux();
 
     // Display the animation and info about the settings
     showGimbals();
@@ -773,8 +985,8 @@ void txData() {
     data.ch3 = throttleValue;
     data.ch4 = yawValue;
     data.ch5 = channelCValue;
-    data.ch6 = 60;
-    data.ch7 = 70;
+    data.ch6 = ch6Value;
+    data.ch7 = 0;
 
     // Sending Data
     radio.write(&data, sizeof(MyData));
@@ -846,6 +1058,16 @@ void setupMode() {
             reverse_menu_refreshed = 1;
             current_reverse_selected = 0;
             showHeaderReverse();
+            return;
+        } else if(current_setup_selected == MENU_SETUP_TIMER) {
+            txmode = MENU_SETUP_TIMER;
+            showHeaderTimers();
+            return;
+        } else if(current_setup_selected == MENU_SETUP_MAPPING) {
+            txmode = MENU_SETUP_MAPPING;
+            mapping_menu_refreshed = 1;
+            current_mapping_selected = 0;
+            showHeaderMapping();
             return;
         }
     }
@@ -1100,12 +1322,20 @@ void showHeaderMain() {
     showHeader(0, 0, "ECHOWII TX", 1);
 }
 
+void showHeaderMapping() {
+    showHeader(0, 0, "MAPPING", 1);
+}
+
 void showHeaderDebug() {
     showHeader(0, 0, "[ DEBUG MODE ]", 0);
 }
 
 void showHeaderReverse() {
     showHeader(0, 0, "REVERSE", 1);
+}
+
+void showHeaderTimers() {
+    showHeader(0, 0, "TIMERS", 1);
 }
 
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style) {

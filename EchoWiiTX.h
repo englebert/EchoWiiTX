@@ -7,6 +7,8 @@
 #define VERSION 001
 #define NOP __asm__ __volatile__ ("nop\n\t")
 void readSwitches();
+void readAnalogs();
+void readAux();
 
 //declare reset function at address 0
 void(* resetFunc) (void) = 0;
@@ -14,6 +16,7 @@ void debugKeys();
 void detectExit();
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position);
 void elimits();
+void mapping();
 void reverse();
 void rfscanMode();
 void saveSettings();
@@ -23,14 +26,17 @@ void setup_radio();
 void setupTimers();
 void setupMode();
 void showGimbals();
+void showHeaderDebug();
 void showHeaderELimits();
 void showHeaderMain();
-void showHeaderDebug();
+void showHeaderMapping();
 void showHeaderReverse();
 void showHeaderSetup();
+void showHeaderTimers();
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
 void showLogo();
 void showRFScanMode();
+void runTimers();
 void txData();
 void txMode();
 
@@ -45,12 +51,18 @@ void EEPROMWrite16Bits(uint16_t addr, uint16_t value);
 uint16_t EEPROMRead16Bits(uint16_t addr);
 uint8_t checksum();
 
+/* Is the key pressed? */
+uint8_t isPressed(char keyChar);
+
 /* Skip some processes */
 uint8_t shortDelay(uint16_t max_count);
 
 /* Reading analogue values. */
 uint16_t throttleValue, yawValue, pitchValue, rollValue;
 uint16_t batteryVoltageValue, channelCValue;
+
+uint8_t portAUX[3] = {};
+uint8_t ch6Value = 0;
 
 /* Controller variables */
 uint8_t sw_a, sw_b, sw_d, sw_e, sw_f, sw_g, sw_h;
@@ -89,8 +101,8 @@ uint8_t reverse_channelc = 0;
 /* For counter checking eeprom checksum */
 uint8_t eeprom_checksum;
 
-/* For preventing too sensitive on the switch */
-uint8_t switches_state = 0;
-
+/* For Timers use */
+uint32_t timer1 = 0;
+uint32_t timer2 = 0;
 
 #endif

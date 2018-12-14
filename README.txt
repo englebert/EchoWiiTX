@@ -21,6 +21,9 @@ EEPROM Format Design:
 |RollMin     | The minimum value of the Roll value     | 0x000C |   2  |
 |RollMax     | The maximum value of the Roll value     | 0x000E |   2  |
 |ReverseBits | Analog input reverse settings           | 0x0010 |   1  |
+|Aux2Switch  | Store Aux2 Switches Map                 | 0x0011 |   1  |
+|Aux3Switch  | Store Aux3 Switches Map                 | 0x0012 |   1  |
+|Aux4Switch  | Store Aux4 Switches Map                 | 0x0013 |   1  |
 |            |                                         |        |      |
 |checksum    | The EEPROM CHECKSUM value               | 0x03FF |   1  |
 +------------+-----------------------------------------+--------+------+
@@ -36,20 +39,22 @@ TX Format:
 +--------+------+-------+----------+-----+------+------+------+------+------+------+------+------+------+-----------------+
 
 The above diagram is based on 7 channels over NRF24L01 modules. By default NRF24L01 lowest bitrate is 250kbps which is 32kB/s.
-If transferring at this speed, I can actually sending a series of data over to RX module. Based on my previous test, I found
-that the code able to transmit 127 packets per second which is around 1016B/s. If I am able reduce to 7 Bytes per packet, I
-should be able to achieve 145 packets per second to RX module. Each process of TX requires about 7.87mS for ATMEGA328P.
+Now is running at average 745 packets/second.
 
 
 On Going Development:
-1. Enhancing the TX speed - DONE
-2. Remote changing Channels
-3. Channel Mapping
-4. Switch Mapping
-5. Telemetry
-6. Reverse Stick Values - DONE
-7. Timer
+1. Enhancing the TX speed   - DONE
+2. Remote changing Channels -
+3. Channel Mapping          -
+4. Switch Mapping           - DONE
+5. Telemetry                -
+6. Reverse Stick Values     - DONE
+7. Timer                    - IN PROGRESS
+8. Dimmer                   - 
+9. Mixer                    - TBA
+
 Updates:
+2. Added AUX2, AUX3 and AUX4 freely mapping to SWITCH A ~ I. Fixed some algorithm speeding up the process.
 1. Enhanced TX Speed from 127 Packets/s to 755 Packets/s. This is due to the OLED refreshing rate reduced to 2FPS. Saving some resources and give more resources to the data transmission. Also removed the CH8 from the data structure.
 
 By Englebert.
