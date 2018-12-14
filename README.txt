@@ -9,21 +9,21 @@ Once I had completed the whole thing, I will release the schematics for everyone
 
 
 EEPROM Format Design:
-+------------+-----------------------------------------+--------+
-|Name        | Description                             | Addr   |
-+------------+-----------------------------------------+--------+
-|ThrottleMin | The minimum value of the Throttle value | 0x0000 |
-|ThrottleMax | The maximum value of the Throttle value | 0x0002 |
-|YawMin      | The minumum value of the Yaw value      | 0x0004 |
-|YawMax      | The maximum value of the Yaw value      | 0x0006 |
-|PitchMin    | The miminum value of the Pitch value    | 0x0008 |
-|PitchMax    | The maximum value of the Pitch value    | 0x000A |
-|RollMin     | The minimum value of the Roll value     | 0x000C |
-|RollMax     | The maximum value of the Roll value     | 0x000E |
-|            |                                         |        |
-|checksum    | The EEPROM CHECKSUM value               | 0x03FF |
-+------------+-----------------------------------------+--------+
-
++------------+-----------------------------------------+--------+------+
+|Name        | Description                             | Addr   | Size |
++------------+-----------------------------------------+--------+------+
+|ThrottleMin | The minimum value of the Throttle value | 0x0000 |   2  |
+|ThrottleMax | The maximum value of the Throttle value | 0x0002 |   2  |
+|YawMin      | The minumum value of the Yaw value      | 0x0004 |   2  |
+|YawMax      | The maximum value of the Yaw value      | 0x0006 |   2  |
+|PitchMin    | The miminum value of the Pitch value    | 0x0008 |   2  |
+|PitchMax    | The maximum value of the Pitch value    | 0x000A |   2  |
+|RollMin     | The minimum value of the Roll value     | 0x000C |   2  |
+|RollMax     | The maximum value of the Roll value     | 0x000E |   2  |
+|ReverseBits | Analog input reverse settings           | 0x0010 |   1  |
+|            |                                         |        |      |
+|checksum    | The EEPROM CHECKSUM value               | 0x03FF |   1  |
++------------+-----------------------------------------+--------+------+
 
 
 TX Format:
@@ -48,7 +48,7 @@ On Going Development:
 4. Switch Mapping
 5. Telemetry
 6. Reverse reading
-
+7. Timer
 Updates:
 1. Enhanced TX Speed from 127 Packets/s to 755 Packets/s. This is due to the OLED refreshing rate reduced to 2FPS. Saving some resources and give more resources to the data transmission. Also removed the CH8 from the data structure.
 
