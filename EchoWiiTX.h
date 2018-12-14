@@ -66,10 +66,29 @@ uint16_t pitch_lower_limit = 300;
 uint16_t roll_upper_limit = 600;
 uint16_t roll_lower_limit = 300;
 
+/* For each of the gimbal stick and analog input reverse state */
+/* If 0: read as normal.
+   If 1: reverse the read values.
+   EEPROM addr: 0x0010
+   Bits |7|6|5|4|3|2|1|0|
+         - - - C R Y P T
+   T: Throttle
+   P: Pitch
+   Y: Yaw
+   R: Roll
+   C: Channel C
+*/
+uint8_t reverse_throttle = 0;
+uint8_t reverse_yaw = 0;
+uint8_t reverse_pitch = 0;
+uint8_t reverse_roll = 0;
+uint8_t reverse_channelc = 0;
+
 /* For counter checking eeprom checksum */
 uint8_t eeprom_checksum;
 
 /* For preventing too sensitive on the switch */
 uint8_t switches_state = 0;
+
 
 #endif
