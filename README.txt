@@ -42,12 +42,15 @@ should be able to achieve 145 packets per second to RX module. Each process of T
 
 
 On Going Development:
-1. Enhancing the TX speed
+1. Enhancing the TX speed - DONE
 2. Remote changing Channels
 3. Channel Mapping
 4. Switch Mapping
 5. Telemetry
+6. Reverse reading
 
+Updates:
+1. Enhanced TX Speed from 127 Packets/s to 755 Packets/s. This is due to the OLED refreshing rate reduced to 2FPS. Saving some resources and give more resources to the data transmission. Also removed the CH8 from the data structure.
 
 By Englebert.
 
