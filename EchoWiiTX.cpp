@@ -18,6 +18,19 @@
 // For Saving configurations
 #include <EEPROM.h>
 
+/* EEPROM RELATED */
+#define EEPROM_MAXADDR 17
+#define EEPROM_THROTTLE_LIMIT_ADDR 0x0000
+#define EEPROM_YAW_LIMIT_ADDR 0x0004
+#define EEPROM_PITCH_LIMIT_ADDR 0x0008
+#define EEPROM_ROLL_LIMIT_ADDR 0x000C
+#define EEPROM_REVERSE_ADDR 0x0010
+#define EEPROM_CHECKSUM_ADDR 0x03FF
+
+/* Save Settings Definition */
+#define ELIMIT 1
+#define REVERSE 2
+
 /*
  * Keypad configuration
  */
@@ -318,7 +331,7 @@ uint16_t EEPROMRead16Bits(uint16_t addr) {
  */
 uint8_t checksum() {
     uint8_t sum=0x68;                 // checksum init
-    for(uint16_t i = 0; i < 16; i++) {
+    for(uint16_t i = 0; i < EEPROM_MAXADDR; i++) {
         sum += EEPROM.read(i);
     }
     return sum;
@@ -329,38 +342,67 @@ void readEEPROM() {
     uint16_t addr = 0;
 
     // Reading checksum from EEPROM
-    eeprom_checksum = EEPROM.read(0x03FF);
+    eeprom_checksum = EEPROM.read(EEPROM_CHECKSUM_ADDR);
 
     // If checksum wrong then load default else load from it.
     if(eeprom_checksum == checksum()) {
         // Reading the data
-        throttle_lower_limit = EEPROMRead16Bits(0x0000);
-        throttle_upper_limit = EEPROMRead16Bits(0x0002);
-        yaw_lower_limit = EEPROMRead16Bits(0x0004);
-        yaw_upper_limit = EEPROMRead16Bits(0x0006);
-        pitch_lower_limit = EEPROMRead16Bits(0x0008);
-        pitch_upper_limit = EEPROMRead16Bits(0x000A);
-        roll_lower_limit = EEPROMRead16Bits(0x000C);
-        roll_upper_limit = EEPROMRead16Bits(0x000E);
+        throttle_lower_limit = EEPROMRead16Bits(EEPROM_THROTTLE_LIMIT_ADDR);
+        throttle_upper_limit = EEPROMRead16Bits(EEPROM_THROTTLE_LIMIT_ADDR + 2);
+        yaw_lower_limit = EEPROMRead16Bits(EEPROM_YAW_LIMIT_ADDR);
+        yaw_upper_limit = EEPROMRead16Bits(EEPROM_YAW_LIMIT_ADDR + 2);
+        pitch_lower_limit = EEPROMRead16Bits(EEPROM_PITCH_LIMIT_ADDR);
+        pitch_upper_limit = EEPROMRead16Bits(EEPROM_PITCH_LIMIT_ADDR + 2);
+        roll_lower_limit = EEPROMRead16Bits(EEPROM_ROLL_LIMIT_ADDR);
+        roll_upper_limit = EEPROMRead16Bits(EEPROM_ROLL_LIMIT_ADDR + 2);
+
+        // Analog Input Reverse data
+        /* EEPROM addr: 0x0010
+           Bits |7|6|5|4|3|2|1|0|
+                 - - - C R Y P T
+           T: Throttle
+           P: Pitch
+           Y: Yaw
+           R: Roll
+           C: Channel C  */
+        uint8_t reverseBits = EEPROM.read(EEPROM_REVERSE_ADDR);
+
+        // Assigning values
+        reverse_throttle = reverseBits & B00000001;
+        reverse_pitch = (reverseBits & B00000010) >> 1;
+        reverse_yaw = (reverseBits & B00000100) >> 2;
+        reverse_roll = (reverseBits & B00001000) >> 3;
+        reverse_channelc = (reverseBits & B00010000) >> 4;
     }
 }
 
 /*
  * Save settings to EEPROM
  */
-void saveSettings() {
+void saveSettings(uint8_t settings_type) {
     // Pushing the elimits to EEPROM
-    EEPROMWrite16Bits(0x0000, throttle_lower_limit);
-    EEPROMWrite16Bits(0x0002, throttle_upper_limit);
-    EEPROMWrite16Bits(0x0004, yaw_lower_limit);
-    EEPROMWrite16Bits(0x0006, yaw_upper_limit);
-    EEPROMWrite16Bits(0x0008, pitch_lower_limit);
-    EEPROMWrite16Bits(0x000A, pitch_upper_limit);
-    EEPROMWrite16Bits(0x000C, roll_lower_limit);
-    EEPROMWrite16Bits(0x000E, roll_upper_limit);
+    if(settings_type == ELIMIT) {
+        EEPROMWrite16Bits(EEPROM_THROTTLE_LIMIT_ADDR, throttle_lower_limit);
+        EEPROMWrite16Bits(EEPROM_THROTTLE_LIMIT_ADDR + 2, throttle_upper_limit);
+        EEPROMWrite16Bits(EEPROM_YAW_LIMIT_ADDR, yaw_lower_limit);
+        EEPROMWrite16Bits(EEPROM_YAW_LIMIT_ADDR + 2, yaw_upper_limit);
+        EEPROMWrite16Bits(EEPROM_PITCH_LIMIT_ADDR, pitch_lower_limit);
+        EEPROMWrite16Bits(EEPROM_PITCH_LIMIT_ADDR + 2, pitch_upper_limit);
+        EEPROMWrite16Bits(EEPROM_ROLL_LIMIT_ADDR, roll_lower_limit);
+        EEPROMWrite16Bits(EEPROM_ROLL_LIMIT_ADDR + 2, roll_upper_limit);
+    } else if(settings_type == REVERSE) {
+        uint8_t reverseBits = 
+                    reverse_throttle +
+                    (reverse_pitch << 1) +
+                    (reverse_yaw << 2) +
+                    (reverse_roll << 3) +
+                    (reverse_channelc << 4);
+
+        EEPROM.write(EEPROM_REVERSE_ADDR, reverseBits);
+    }
 
     // Getting the checksum and push the the last bit of the EEPROM
-    EEPROM.write(0x03FF, checksum());
+    EEPROM.write(EEPROM_CHECKSUM_ADDR, checksum());
 }
 
 /*
@@ -599,9 +641,13 @@ void readAnalogs() {
 
     // TODO:
     // Channel Mapping
-    // Reverse
-    yawValue = 255 - yawValue;
-    pitchValue = 255 - pitchValue;
+
+    // Reverse Channels if flag is set
+    if(reverse_throttle == 1) throttleValue = 255 - throttleValue;
+    if(reverse_yaw == 1) yawValue = 255 - yawValue;
+    if(reverse_pitch == 1) pitchValue = 255 - pitchValue;
+    if(reverse_roll == 1) rollValue = 255 - rollValue;
+    if(reverse_channelc == 1) channelCValue = 255 - channelCValue;
 
     // Battery Input
     batteryVoltageValue = analogReadFast(BAT_IN);
@@ -848,7 +894,7 @@ void elimits() {
 
     // Save settings
     if(rgimbal_right == 1) {
-        saveSettings();
+        saveSettings(ELIMIT);
 
         // Return to main menu
         txmode = MENU_SETUP;
