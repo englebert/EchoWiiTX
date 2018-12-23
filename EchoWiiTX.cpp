@@ -144,6 +144,14 @@ uint8_t oled_refresh = 0;
 // For Debugging Purposes
 // #define DEBUG 1
 
+// Receiver Backlight
+uint8_t backlight_enable = 0;
+
+// COMMAND BITS DEFINES
+#define CMD_BACKLIGHT 0x01
+#define BACKLIGHT_ENABLE 1
+#define BACKLIGHT_DISABLE 0
+
 char buf[32];
 char line_buffer[32];
 
@@ -935,8 +943,29 @@ void txMode() {
         return;
     }
 
+    // BackLight - Special Mode (Only on LONG PRESS)
+    if(sw_h == 1) {
+        if(backlight_state == 0) {
+            ch6Value = ch6Value + CMD_BACKLIGHT;
+            if(backlight_enable == 0) {
+                backlight_enable = 1;
+                ch7Value = BACKLIGHT_ENABLE;
+            } else {
+                backlight_enable = 0;
+                ch7Value = BACKLIGHT_DISABLE;
+            }
+            backlight_state = 1;
+        }
+    } else {
+        // Flipping the flag
+        if(backlight_state == 1) backlight_state = 0;
+    }
+
     // Processing data and sending
     txData();
+
+    // Reset values
+    ch7Value = 0;
 }
 
 /*
@@ -986,7 +1015,7 @@ void txData() {
     data.ch4 = yawValue;
     data.ch5 = channelCValue;
     data.ch6 = ch6Value;
-    data.ch7 = 0;
+    data.ch7 = ch7Value;
 
     // Sending Data
     radio.write(&data, sizeof(MyData));

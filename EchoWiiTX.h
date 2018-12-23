@@ -63,6 +63,10 @@ uint16_t batteryVoltageValue, channelCValue;
 
 uint8_t portAUX[3] = {};
 uint8_t ch6Value = 0;
+uint8_t ch7Value = 0;
+
+/* For controlling the flight blinking light */
+uint8_t backlight_state = 0;
 
 /* Controller variables */
 uint8_t sw_a, sw_b, sw_d, sw_e, sw_f, sw_g, sw_h;
