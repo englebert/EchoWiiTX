@@ -19,7 +19,7 @@
 #include <EEPROM.h>
 
 /* EEPROM RELATED */
-#define EEPROM_MAXADDR              20
+#define EEPROM_MAXADDR              21
 #define EEPROM_THROTTLE_LIMIT_ADDR  0x0000
 #define EEPROM_YAW_LIMIT_ADDR       0x0004
 #define EEPROM_PITCH_LIMIT_ADDR     0x0008
@@ -28,12 +28,15 @@
 #define EEPROM_AUX2SWITCH_ADDR      0x0011
 #define EEPROM_AUX3SWITCH_ADDR      0x0012
 #define EEPROM_AUX4SWITCH_ADDR      0x0013
+#define EEPROM_RXAUX1SWITCH_ADDR    0x0014
+
 #define EEPROM_CHECKSUM_ADDR        0x03FF
 
 /* Save Settings Definition */
-#define ELIMIT      1
-#define REVERSE     2
-#define AUXSWITCHES 3 
+#define ELIMIT        1
+#define REVERSE       2
+#define AUXSWITCHES   3
+#define AUXRXSWITCHES 4
 
 /*
  * Keypad configuration
@@ -92,18 +95,6 @@ struct MyData {
     uint8_t ch7;
 };
 MyData data;
-
-/* Menu definitions -- START */
-#define TXMODE                   0
-#define MENU_SETUP               99
-#define MENU_SETUP_TIMER         1
-#define MENU_SETUP_ELIMIT        2
-#define MENU_SETUP_REVERSE       4
-#define MENU_SETUP_MAPPING       5
-#define MENU_SETUP_RF_SCANNER    7
-#define MENU_SETUP_KEYS_DEBUGGER 8
-#define MENU_SETUP_EXIT          10
-/* Menu definitions -- END   */
 
 // Default mode = 0
 // MODE:
@@ -179,18 +170,31 @@ uint8_t current_setup_selected = 0;
 uint8_t setup_menu_refreshed = 0;
 
 const char *menuItemsSetup[] = {
-    "Model Setup",
-    "Timers",
-    "E.Limits",
-    "E.Trim",
-    "Reverse",
-    "Mapping",
-    "Expo",
-    "RF Scanner",
-    "Keys Debugger",
-    "About",
-    "Exit"
+    "Model Setup",          // 0
+    "Timers",               // 1
+    "E.Limits",             // 2
+    "E.Trim",               // 3
+    "Reverse",              // 4
+    "FC Mapping",           // 5
+    "RX Mapping",           // 6
+    "Expo",                 // 7
+    "RF Scanner",           // 8
+    "Keys Debugger",        // 9
+    "Exit"                  // 10
 };
+
+/* Menu definitions -- START */
+#define TXMODE                   0
+#define MENU_SETUP               99
+#define MENU_SETUP_TIMER         1
+#define MENU_SETUP_ELIMIT        2
+#define MENU_SETUP_REVERSE       4
+#define MENU_SETUP_FC_MAPPING    5
+#define MENU_SETUP_RX_MAPPING    6
+#define MENU_SETUP_RF_SCANNER    8
+#define MENU_SETUP_KEYS_DEBUGGER 9
+#define MENU_SETUP_EXIT          10
+/* Menu definitions -- END   */
 
 uint8_t max_items_setup = (sizeof(menuItemsSetup) / sizeof(char *)) - 1;
 uint8_t max_page_setup = max_items_setup - 5;
@@ -206,6 +210,12 @@ uint8_t reverse_menu_refreshed = 0;
  */
 uint8_t current_mapping_selected = 0;
 uint8_t mapping_menu_refreshed = 0;
+
+/*
+ * RX Mapping Menu
+ */
+uint8_t current_rx_mapping_selected = 0;
+uint8_t rxmapping_menu_refreshed = 0;
 
 /*
  * 2.4G Scanning Program [START]
@@ -449,7 +459,8 @@ void readEEPROM() {
         reverse_roll = (reverseBits & B00001000) >> 3;
         reverse_channelc = (reverseBits & B00010000) >> 4;
 
-        for(uint8_t i = 0; i < 3; i++) {
+        // Reading Auxilary Ports For FC Channel assignments
+        for(uint8_t i = 0; i < AUXMAX; i++) {
             // Aux2, Aux3 and Aux4 Port values
             portAUX[i] = EEPROM.read(EEPROM_AUX2SWITCH_ADDR + i);
 
@@ -457,6 +468,17 @@ void readEEPROM() {
             if(portAUX[i] < SWITCH_MIN_VALUE)
                 portAUX[i] = SWITCH_MIN_VALUE;
         }
+
+        // Reading Auxiliary Ports For RX Channel assignments
+        for(uint8_t i = 0; i < RXAUXMAX; i++) {
+            // Aux2, Aux3 and Aux4 Port values 
+            portRXAUX[i] = EEPROM.read(EEPROM_RXAUX1SWITCH_ADDR + i);
+
+            // Default minimum values
+            if(portRXAUX[i] < SWITCH_MIN_VALUE)
+                portRXAUX[i] = SWITCH_MIN_VALUE;
+        }
+        
     } else {
         // Defaults 
         throttle_lower_limit = 400;
@@ -472,9 +494,10 @@ void readEEPROM() {
         reverse_yaw = 0;
         reverse_roll = 0;
         reverse_channelc = 0;
-        portAUX[0] = SWITCH_MIN_VALUE;
-        portAUX[1] = SWITCH_MIN_VALUE;
-        portAUX[2] = SWITCH_MIN_VALUE;
+        portAUX[0] = SWITCH_MIN_VALUE;          // The - sign
+        portAUX[1] = SWITCH_MIN_VALUE;          // The - sign
+        portAUX[2] = SWITCH_MIN_VALUE;          // The - sign
+        portRXAUX[0] = SWITCH_MIN_VALUE;        // The - sign
     }
 }
 
@@ -505,8 +528,14 @@ void saveSettings(uint8_t settings_type) {
 
     // Settings AUX switches to EEPROM
     } else if(settings_type == AUXSWITCHES) {
-        for(uint8_t i = 0; i < 3; i++) {
+        for(uint8_t i = 0; i < AUXMAX; i++) {
             EEPROM.write(EEPROM_AUX2SWITCH_ADDR + i, portAUX[i]);
+        }
+
+    // Settings for RX AUX to EEPROM
+    } else if(settings_type == AUXRXSWITCHES) {
+        for(uint8_t i = 0; i < RXAUXMAX; i++) {
+            EEPROM.write(EEPROM_RXAUX1SWITCH_ADDR + i, portRXAUX[i]);
         }
     }
 
@@ -649,9 +678,115 @@ void loop() {
         reverse();
     } else if(txmode == MENU_SETUP_TIMER) {
         runTimers();
-    } else if(txmode == MENU_SETUP_MAPPING) {
+    } else if(txmode == MENU_SETUP_FC_MAPPING) {
         mapping();
+    } else if(txmode == MENU_SETUP_RX_MAPPING) {
+        rxmapping();
     }
+}
+
+/*
+ * RX Mapping keys
+ */
+void rxmapping() {
+    readSwitches();
+
+    // Skip for a while
+    if(shortDelay(15000) == 0) return;
+
+    // Display all the reversable sticks values and then let the user to select 
+    // and pick. May involve Up, Down, Left and Right for selection.    
+    const char *menuItemsMapping[] = {
+        "RXAUX1",
+        "Exit"
+    };
+
+    uint8_t max_items_mapping = (sizeof(menuItemsMapping) / sizeof(char *)) - 1;
+
+    // If Down switch pressed, select another menu
+    if(rgimbal_down == 1) {
+        if(current_rx_mapping_selected < max_items_mapping)
+            current_rx_mapping_selected++;
+        rxmapping_menu_refreshed = 1;
+    } else if(rgimbal_up == 1) {
+        if(current_rx_mapping_selected > 0)
+            current_rx_mapping_selected--;
+        rxmapping_menu_refreshed = 1;
+    } else if(rgimbal_right == 1 || rgimbal_left == 1) {
+        // If is the last item then exit back to the menu
+        if(current_rx_mapping_selected == max_items_mapping) {
+            txmode = MENU_SETUP;
+            showHeaderSetup();
+            return;
+        }
+
+        // RX AUXILIARY 1...
+        if(rgimbal_right == 1) {
+            if(portRXAUX[current_rx_mapping_selected] < SWITCH_MAX_VALUE)
+                portRXAUX[current_rx_mapping_selected]++;
+
+            // Skip C which is not using
+            if(portRXAUX[current_rx_mapping_selected] == 67)
+                portRXAUX[current_rx_mapping_selected]++;
+
+
+        } else if(rgimbal_left == 1) {
+            if(portRXAUX[current_rx_mapping_selected] > SWITCH_MIN_VALUE)
+                portRXAUX[current_rx_mapping_selected]--;
+
+            // Skip C which is not using
+            if(portRXAUX[current_rx_mapping_selected] == 67)
+                portRXAUX[current_rx_mapping_selected]--;
+        }
+        
+        // Refresh menu
+        rxmapping_menu_refreshed = 1;
+
+        // Save EEPROM settings - AUXRXSWITCHES configuration only
+        saveSettings(AUXRXSWITCHES);
+
+    }
+
+    // Skip from here if no need to refresh screen.
+    if(rxmapping_menu_refreshed == 0) return;
+
+    // Processing the menu also at the same time put a symbol if is toggled
+    uint8_t j = 0;
+    uint8_t y = 0;
+    uint8_t c = 0;
+
+    for(uint8_t i = 0; i <= max_items_mapping; i++) {
+        // Y position of the menu
+        y = 17 + (j * 8);
+
+        // Clear previous line
+        ssd1306_printFixed(0, y, "               ", STYLE_NORMAL);
+
+        // Print Menu
+        ssd1306_printFixed(8, y, menuItemsMapping[i], STYLE_NORMAL);
+
+        // Print Current Toggle Value
+        if(i != max_items_mapping) {
+            if(portRXAUX[i] == SWITCH_MIN_VALUE) {
+                // ASCII CODE: -
+                c = 45;
+            } else {
+                c = portRXAUX[i];
+            }
+
+            sprintf(buf, "[%c]", c);
+            ssd1306_printFixed(64, y, buf, STYLE_NORMAL);
+        }
+        
+        // Print cursor
+        if(i == current_rx_mapping_selected) {
+            ssd1306_printFixed(0, y, ">", STYLE_NORMAL);
+        }
+        j++;
+    }
+
+    // Prevent menu refreshed
+    rxmapping_menu_refreshed = 0;
 }
 
 /*
@@ -881,6 +1016,9 @@ void readAux() {
             ch6Value = ch6Value | (1 << (7 - i));
         }
     }
+
+    // TODO:
+    // Queue command system. So it will based on queue and sending the command to remote
 }
 
 /*
@@ -1092,11 +1230,17 @@ void setupMode() {
             txmode = MENU_SETUP_TIMER;
             showHeaderTimers();
             return;
-        } else if(current_setup_selected == MENU_SETUP_MAPPING) {
-            txmode = MENU_SETUP_MAPPING;
+        } else if(current_setup_selected == MENU_SETUP_FC_MAPPING) {
+            txmode = MENU_SETUP_FC_MAPPING;
             mapping_menu_refreshed = 1;
             current_mapping_selected = 0;
             showHeaderMapping();
+            return;
+        } else if(current_setup_selected == MENU_SETUP_RX_MAPPING) {
+            txmode = MENU_SETUP_RX_MAPPING;
+            rxmapping_menu_refreshed = 1;
+            current_rx_mapping_selected = 0;
+            showHeaderRXMapping();
             return;
         }
     }
@@ -1352,7 +1496,11 @@ void showHeaderMain() {
 }
 
 void showHeaderMapping() {
-    showHeader(0, 0, "MAPPING", 1);
+    showHeader(0, 0, "FC MAPPING", 1);
+}
+
+void showHeaderRXMapping() {
+    showHeader(0, 0, "RX MAPPING", 1);
 }
 
 void showHeaderDebug() {

@@ -19,6 +19,7 @@ void elimits();
 void mapping();
 void reverse();
 void rfscanMode();
+void rxmapping();
 void saveSettings();
 void scanChannels();
 void setup_inputs();
@@ -31,6 +32,7 @@ void showHeaderELimits();
 void showHeaderMain();
 void showHeaderMapping();
 void showHeaderReverse();
+void showHeaderRXMapping();
 void showHeaderSetup();
 void showHeaderTimers();
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
@@ -61,7 +63,15 @@ uint8_t shortDelay(uint16_t max_count);
 uint16_t throttleValue, yawValue, pitchValue, rollValue;
 uint16_t batteryVoltageValue, channelCValue;
 
-uint8_t portAUX[3] = {};
+/* For the Auxilary ports on FC module */
+#define AUXMAX 3
+uint8_t portAUX[AUXMAX] = {};
+
+/* For the Auxilary ports on RX module */
+#define RXAUXMAX 1
+uint8_t portRXAUX[RXAUXMAX] = {};
+
+/* For the channel transmission data */
 uint8_t ch6Value = 0;
 uint8_t ch7Value = 0;
 

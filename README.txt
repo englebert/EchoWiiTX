@@ -24,6 +24,7 @@ EEPROM Format Design:
 |Aux2Switch  | Store Aux2 Switches Map                 | 0x0011 |   1  |
 |Aux3Switch  | Store Aux3 Switches Map                 | 0x0012 |   1  |
 |Aux4Switch  | Store Aux4 Switches Map                 | 0x0013 |   1  |
+|RxAux1      | Auxilary Port at RX Module - 1          | 0x0014 |   1  |
 |            |                                         |        |      |
 |checksum    | The EEPROM CHECKSUM value               | 0x03FF |   1  |
 +------------+-----------------------------------------+--------+------+
@@ -41,6 +42,8 @@ TX Format:
 The above diagram is based on 7 channels over NRF24L01 modules. By default NRF24L01 lowest bitrate is 250kbps which is 32kB/s.
 Now is running at average 745 packets/second.
 
+TODO:
+1. Code refactoring on menu functions
 
 On Going Development:
 1. Enhancing the TX speed   - DONE
@@ -54,6 +57,8 @@ On Going Development:
 9. Mixer                    - TBA
 
 Updates:
+4. Added and changed the menu title of Mapping. Also added RX Mapping menu. Able to save the settings to RX Mapping. Next todo is to transfer the backlight to rx aux light.
+3. Added backlight blink by transmitting command bits.
 2. Added AUX2, AUX3 and AUX4 freely mapping to SWITCH A ~ I. Fixed some algorithm speeding up the process.
 1. Enhanced TX Speed from 127 Packets/s to 755 Packets/s. This is due to the OLED refreshing rate reduced to 2FPS. Saving some resources and give more resources to the data transmission. Also removed the CH8 from the data structure.
 
