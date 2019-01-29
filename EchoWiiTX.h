@@ -16,6 +16,7 @@ void debugKeys();
 void detectExit();
 void drawBars(uint8_t x, uint8_t y, uint8_t max_bars, uint8_t bar_position);
 void elimits();
+void idleup();
 void mapping();
 void reverse();
 void rfscanMode();
@@ -33,6 +34,7 @@ void showHeaderMain();
 void showHeaderMapping();
 void showHeaderReverse();
 void showHeaderRXMapping();
+void showHeaderIdleUPMapping();
 void showHeaderSetup();
 void showHeaderTimers();
 void showHeader(uint8_t x, uint8_t y, const char *title, uint8_t style);
@@ -70,6 +72,10 @@ uint8_t portAUX[AUXMAX] = {};
 /* For the Auxilary ports on RX module */
 #define RXAUXMAX 1
 uint8_t portRXAUX[RXAUXMAX] = {};
+
+/* For the IdleUp Throttle Switch */
+#define IDLEUPMAX 1
+uint8_t idleUpThrottle[IDLEUPMAX] = {};
 
 /* For the channel transmission data */
 uint8_t ch6Value = 0;

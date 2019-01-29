@@ -46,15 +46,17 @@ TODO:
 1. Code refactoring on menu functions
 
 On Going Development:
-1. Enhancing the TX speed   - DONE
-2. Remote changing Channels -
-3. Channel Mapping          -
-4. Switch Mapping           - DONE
-5. Telemetry                -
-6. Reverse Stick Values     - DONE
-7. Timer                    - IN PROGRESS
-8. Dimmer                   - 
-9. Mixer                    - TBA
+1.  Enhancing the TX speed   - DONE
+2.  Remote changing Channels -
+3.  Channel Mapping          -
+4.  Switch Mapping           - DONE
+5.  Telemetry                -
+6.  Reverse Stick Values     - DONE
+7.  Timer                    - IN PROGRESS
+8.  Dimmer                   - 
+9.  Mixer                    - TBA
+10. Half Throttle Mode       - DONE (Is from FC not from this module)
+11. Idle UP                  - IN PROGRESS
 
 Updates:
 4. Added and changed the menu title of Mapping. Also added RX Mapping menu. Able to save the settings to RX Mapping. Next todo is to transfer the backlight to rx aux light.

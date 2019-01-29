@@ -19,7 +19,7 @@
 #include <EEPROM.h>
 
 /* EEPROM RELATED */
-#define EEPROM_MAXADDR              21
+#define EEPROM_MAXADDR              22
 #define EEPROM_THROTTLE_LIMIT_ADDR  0x0000
 #define EEPROM_YAW_LIMIT_ADDR       0x0004
 #define EEPROM_PITCH_LIMIT_ADDR     0x0008
@@ -29,14 +29,16 @@
 #define EEPROM_AUX3SWITCH_ADDR      0x0012
 #define EEPROM_AUX4SWITCH_ADDR      0x0013
 #define EEPROM_RXAUX1SWITCH_ADDR    0x0014
+#define EEPROM_IDLEUP_ADDR          0x0015
 
 #define EEPROM_CHECKSUM_ADDR        0x03FF
 
 /* Save Settings Definition */
-#define ELIMIT        1
-#define REVERSE       2
-#define AUXSWITCHES   3
-#define AUXRXSWITCHES 4
+#define ELIMIT          1
+#define REVERSE         2
+#define AUXSWITCHES     3
+#define AUXRXSWITCHES   4
+#define IDLEUPSWITCHES  5
 
 /*
  * Keypad configuration
@@ -177,23 +179,24 @@ const char *menuItemsSetup[] = {
     "Reverse",              // 4
     "FC Mapping",           // 5
     "RX Mapping",           // 6
-    "Expo",                 // 7
+    "IdleUp Setup",         // 7
     "RF Scanner",           // 8
     "Keys Debugger",        // 9
     "Exit"                  // 10
 };
 
 /* Menu definitions -- START */
-#define TXMODE                   0
-#define MENU_SETUP               99
-#define MENU_SETUP_TIMER         1
-#define MENU_SETUP_ELIMIT        2
-#define MENU_SETUP_REVERSE       4
-#define MENU_SETUP_FC_MAPPING    5
-#define MENU_SETUP_RX_MAPPING    6
-#define MENU_SETUP_RF_SCANNER    8
-#define MENU_SETUP_KEYS_DEBUGGER 9
-#define MENU_SETUP_EXIT          10
+#define TXMODE                      0
+#define MENU_SETUP                  99
+#define MENU_SETUP_TIMER            1
+#define MENU_SETUP_ELIMIT           2
+#define MENU_SETUP_REVERSE          4
+#define MENU_SETUP_FC_MAPPING       5
+#define MENU_SETUP_RX_MAPPING       6
+#define MENU_SETUP_IDLEUP_MAPPING   7
+#define MENU_SETUP_RF_SCANNER       8
+#define MENU_SETUP_KEYS_DEBUGGER    9
+#define MENU_SETUP_EXIT             10
 /* Menu definitions -- END   */
 
 uint8_t max_items_setup = (sizeof(menuItemsSetup) / sizeof(char *)) - 1;
@@ -216,6 +219,12 @@ uint8_t mapping_menu_refreshed = 0;
  */
 uint8_t current_rx_mapping_selected = 0;
 uint8_t rxmapping_menu_refreshed = 0;
+
+/*
+ * IdleUp Mapping Menu
+ */
+uint8_t current_idleup_mapping_selected = 0;
+uint8_t idleupmapping_menu_refreshed = 0;
 
 /*
  * 2.4G Scanning Program [START]
@@ -478,6 +487,9 @@ void readEEPROM() {
             if(portRXAUX[i] < SWITCH_MIN_VALUE)
                 portRXAUX[i] = SWITCH_MIN_VALUE;
         }
+
+        // Reading Idle UP
+        idleUpThrottle[0] = EEPROM.read(EEPROM_IDLEUP_ADDR);
         
     } else {
         // Defaults 
@@ -498,6 +510,7 @@ void readEEPROM() {
         portAUX[1] = SWITCH_MIN_VALUE;          // The - sign
         portAUX[2] = SWITCH_MIN_VALUE;          // The - sign
         portRXAUX[0] = SWITCH_MIN_VALUE;        // The - sign
+        idleUpThrottle[0] = SWITCH_MIN_VALUE;   // The - sign
     }
 }
 
@@ -536,6 +549,10 @@ void saveSettings(uint8_t settings_type) {
     } else if(settings_type == AUXRXSWITCHES) {
         for(uint8_t i = 0; i < RXAUXMAX; i++) {
             EEPROM.write(EEPROM_RXAUX1SWITCH_ADDR + i, portRXAUX[i]);
+        }
+    } else if(settings_type == IDLEUPSWITCHES) {
+        for(uint8_t i = 0; i < IDLEUPMAX; i++) {
+            EEPROM.write(EEPROM_IDLEUP_ADDR + i, idleUpThrottle[i]);
         }
     }
 
@@ -682,7 +699,113 @@ void loop() {
         mapping();
     } else if(txmode == MENU_SETUP_RX_MAPPING) {
         rxmapping();
+    } else if(txmode == MENU_SETUP_IDLEUP_MAPPING) {
+        idleup();
     }
+}
+
+/*
+ * idleup Mapping
+ */
+void idleup() {
+    readSwitches();
+
+    // Skip for a while
+    if(shortDelay(15000) == 0) return;
+
+    // Display all the values and then let the user to select 
+    // and pick. May involve Up, Down, Left and Right for selection.    
+    const char *menuItemsIdleUp[] = {
+        "Channel",
+        "Exit"
+    };
+
+    uint8_t max_items_mapping = (sizeof(menuItemsIdleUp) / sizeof(char *)) - 1;
+
+    // If Down switch pressed, select another menu
+    if(rgimbal_down == 1) {
+        if(current_idleup_mapping_selected < max_items_mapping)
+            current_idleup_mapping_selected++;
+        idleupmapping_menu_refreshed = 1;
+    } else if(rgimbal_up == 1) {
+        if(current_idleup_mapping_selected > 0)
+            current_idleup_mapping_selected--;
+        idleupmapping_menu_refreshed = 1;
+    } else if(rgimbal_right == 1 || rgimbal_left == 1) {
+        // If is the last item then exit back to the menu
+        if(current_idleup_mapping_selected == max_items_mapping) {
+            txmode = MENU_SETUP;
+            showHeaderSetup();
+            return;
+        }
+
+        // IDLE 1 Channel
+        if(rgimbal_right == 1) {
+            if(idleUpThrottle[current_idleup_mapping_selected] < SWITCH_MAX_VALUE)
+                idleUpThrottle[current_idleup_mapping_selected]++;
+
+            // Skip C which is not using
+            if(idleUpThrottle[current_idleup_mapping_selected] == 67)
+                idleUpThrottle[current_idleup_mapping_selected]++;
+
+
+        } else if(rgimbal_left == 1) {
+            if(idleUpThrottle[current_idleup_mapping_selected] > SWITCH_MIN_VALUE)
+                idleUpThrottle[current_idleup_mapping_selected]--;
+
+            // Skip C which is not using
+            if(idleUpThrottle[current_idleup_mapping_selected] == 67)
+                idleUpThrottle[current_idleup_mapping_selected]--;
+        }
+        
+        // Refresh menu
+        idleupmapping_menu_refreshed = 1;
+
+        // Save EEPROM settings - IDELUP SWITCHES configuration only
+        saveSettings(IDLEUPSWITCHES);
+
+    }
+
+    // Skip from here if no need to refresh screen.
+    if(idleupmapping_menu_refreshed == 0) return;
+
+    // Processing the menu also at the same time put a symbol if is toggled
+    uint8_t j = 0;
+    uint8_t y = 0;
+    uint8_t c = 0;
+
+    for(uint8_t i = 0; i <= max_items_mapping; i++) {
+        // Y position of the menu
+        y = 17 + (j * 8);
+
+        // Clear previous line
+        ssd1306_printFixed(0, y, "                 ", STYLE_NORMAL);
+
+        // Print Menu
+        ssd1306_printFixed(8, y, menuItemsIdleUp[i], STYLE_NORMAL);
+
+        // Print Current Toggle Value
+        if(i != max_items_mapping) {
+            if(idleUpThrottle[i] == SWITCH_MIN_VALUE) {
+                // ASCII CODE: -
+                c = 45;
+            } else {
+                c = idleUpThrottle[i];
+            }
+
+            sprintf(buf, "[%c]", c);
+            ssd1306_printFixed(64, y, buf, STYLE_NORMAL);
+        }
+        
+        // Print cursor
+        if(i == current_idleup_mapping_selected) {
+            ssd1306_printFixed(0, y, ">", STYLE_NORMAL);
+        }
+        j++;
+    }
+
+    // Prevent menu refreshed
+    idleupmapping_menu_refreshed = 0;
 }
 
 /*
@@ -1031,6 +1154,15 @@ void readAnalogs() {
     rollValue = analogReadFast(ROLL_PORT);
     pitchValue = analogReadFast(PITCH_PORT);
 
+    // If idleUpThrottle is trigger then throttleValue + 50 but the throttle value must be around 1200 before the function 
+    // is applied
+    if(isPressed(idleUpThrottle[0]) == true) {
+        throttleValue += 50;
+
+        // Prevent over shoot
+        if(throttleValue > throttle_upper_limit) throttleValue = throttle_upper_limit;
+    }
+
     // Mapping the values to 1000 - 2000 as standard of the RC values
     // Mapping the values to 0 - 255 from 0 - 1024. It seems transmitting 16 bits a bit lag on
     // responds. Moving back to 8 bits and see what is the result on 
@@ -1241,6 +1373,12 @@ void setupMode() {
             rxmapping_menu_refreshed = 1;
             current_rx_mapping_selected = 0;
             showHeaderRXMapping();
+            return;
+        } else if(current_setup_selected == MENU_SETUP_IDLEUP_MAPPING) {
+            txmode = MENU_SETUP_IDLEUP_MAPPING;
+            idleupmapping_menu_refreshed = 1;
+            current_idleup_mapping_selected = 0;
+            showHeaderIdleUPMapping();
             return;
         }
     }
@@ -1501,6 +1639,10 @@ void showHeaderMapping() {
 
 void showHeaderRXMapping() {
     showHeader(0, 0, "RX MAPPING", 1);
+}
+
+void showHeaderIdleUPMapping() {
+    showHeader(0, 0, "IDLE UP", 1);
 }
 
 void showHeaderDebug() {
